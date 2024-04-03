@@ -1,4 +1,4 @@
-import { InputMedia, InputMediaPhoto, Message, html } from "@mtcute/node";
+import { InputMedia, InputMediaPhoto, Message, UploadedFile, html } from "@mtcute/node";
 import { client } from "./start.js";
 import { tg } from "./tgclient.js";
 import { findByUuid, insertIntoPostgres } from "./db.js";
@@ -62,9 +62,10 @@ class ChatMessageProcessor {
 
 
       let shouldAnswer: boolean = false
-      const imageMap = new Map<string, { count: number; data: message; InputMediaPhoto?: InputMediaPhoto[] }>();
+      // const imageMap = new Map<string, { count: number; data: message; InputMediaPhoto?: InputMediaPhoto[] }>();
+      const imageMap = new Map<string, { count: number; }>();
       // const sameGroupIdMap = new Map<bigint, { data: Message }>();
-
+      const imageDataMap = new Map<string, any>()
 
       for (let [index, element] of bayan.entries()) {
         const allObjectData = data[index]
@@ -76,32 +77,21 @@ class ChatMessageProcessor {
           const msg = allObjectData.data.message
           const maxArraySize = allObjectData.data.Get.Image.length - 1
           const imageArray = allObjectData.data?.Get?.Image
-          let InputMediaPhoto: InputMediaPhoto[] = [];
 
+          console.log(`${index} - длина массива ${imageArray.length}`)
+          let InputMediaPhoto: UploadedFile[] = [];
+          // let InputMediaPhoto: InputMediaPhoto[] = [];
+          console.log(InputMediaPhoto)
           // let sameb64array: {image: string, message: Message}[] = []
           for (let [index, el] of imageArray.entries()) {
             const base64 = el.image
             if (!imageMap.has(base64)) {
-
-              // console.log(base64.substring(0, 60))
-              console.log(base64.slice(-60));
-              const uuid = allObjectData.data.Get.Image[index]._additional.id //this is uuid from vector db
-              // console.log(`uuid ${uuid}`)
-              const imageData = await findByUuid(uuid)
-              imageMap.set(base64, { count: 1, data: imageData! });
-              // if (imageData) {
-              //   // if (!sameGroupIdMap.has(imageData?.groupid)) {
-              //   //   sameGroupIdMap.set(imageData.groupid, {data: imageData.message})
-              //   // } 
-              //   imageMap.set(b64, { count: 1, data: imageData });
-              // }
-              // else {
-              //   continue
-              // }
+              imageMap.set(base64, {count: 1})
             } else {
               let entry = imageMap.get(base64)!;
               entry.count += 1;
               imageMap.set(base64, entry); // Update the count if duplicate
+              console.log('должен был продолжить и не добавлять вторую фотку')
               continue
             }
 
@@ -109,15 +99,25 @@ class ChatMessageProcessor {
                 file: Buffer.from(base64, 'base64'),
                 fileName: 'some.jpg'
             })
-            if (index !== maxArraySize) {
-              InputMediaPhoto.push(InputMedia.photo(data))
-            } else {
-              InputMediaPhoto.push(InputMedia.photo(data, {caption: html`Если какая-либо из фотографий не совыпадает, то пропиши <code>/err</code>`}))
-            }
+            console.log(`${index} - Добавляю фотку `)
+            InputMediaPhoto.push(data)
+            // InputMediaPhoto.push(InputMedia.photo(data, {caption: html`Если какая-либо из фотографий не совыпадает, то пропиши <code>/err</code>`}))
+            // if (index !== maxArraySize) {
+            //   InputMediaPhoto.push(InputMedia.photo(data))
+            // } else {
+            //   InputMediaPhoto.push(InputMedia.photo(data, {caption: html`Если какая-либо из фотографий не совыпадает, то пропиши <code>/err</code>`}))
+            // }
 
-            let entry = imageMap.get(base64)!;
-            entry.InputMediaPhoto = InputMediaPhoto;
-            imageMap.set(base64, entry); 
+           
+            // console.log(entry.InputMediaPhoto)
+          }
+
+          console.log(`${index} - длина InputMediaPhoto: ${InputMediaPhoto.length}`)
+          if (InputMediaPhoto.length>0) {
+            const uuid = allObjectData.data.Get.Image[0]._additional.id //this is uuid from vector db
+            const imageData = await findByUuid(uuid)
+            // imageMap.set(base64, { count: 1, data: imageData!, InputMediaPhoto: InputMediaPhoto });
+            imageDataMap.set(index, {InputMediaPhoto: InputMediaPhoto, imageData: imageData })
           }
           
 
@@ -135,27 +135,61 @@ class ChatMessageProcessor {
           await insertIntoPostgres(result.id!, allObjectData.data.message, groupId, firstMessageGroupId)
         }
       }
+      // console.log(imageMap)
 
       if (shouldAnswer) {
-        const groupsToSend = new Map<bigint, {msg: Message, InputMediaPhoto: InputMediaPhoto[]}>();
+        const groupsToSend = new Map<bigint, {msg: Message, InputMediaPhoto: UploadedFile[]}>();
 
-        for (const value of imageMap.values()) {
-          const groupId = value.data.groupid; // Assuming groupId is bigint
+        console.log(imageDataMap)
+
+        for (const value of imageDataMap.values()) {
+          const groupId = value.imageData.groupid; // Assuming groupId is bigint
           const photos = value.InputMediaPhoto!; // This is already InputMediaPhoto[]
-      
+          
+          console.log(`длина фоток сейчас: ${photos.length}`)
+
           if (!groupsToSend.has(groupId)) {
-              groupsToSend.set(groupId, { msg: value.data.message, InputMediaPhoto: photos });
+              groupsToSend.set(groupId, { msg: value.imageData.message, InputMediaPhoto: photos });
           } else {
-              let entry = groupsToSend.get(groupId)!;
-              entry.InputMediaPhoto.push(...photos); 
+              let newEntry = groupsToSend.get(groupId)!;
+              newEntry.InputMediaPhoto.push(...photos); 
           }
           
         }
 
         for (const value of groupsToSend.values()) {
           const message = value.msg
-          await tg.replyMediaGroup(message, value.InputMediaPhoto); 
+          const maxArraySize = value.InputMediaPhoto.length-1
+          const file = value.InputMediaPhoto.map((el: UploadedFile, index: number) => {
+            if (index === maxArraySize) {
+              return InputMedia.photo(el, {caption: html`Если какая-либо из фотографий не совыпадает, то пропиши <code>/err</code>`})
+            } else {
+              return InputMedia.photo(el)
+            }
+          })
+          
+          await tg.replyMediaGroup(message, file); 
         }
+
+        // for (const value of imageMap.values()) {
+        //   const groupId = value.data.groupid; // Assuming groupId is bigint
+        //   const photos = value.InputMediaPhoto!; // This is already InputMediaPhoto[]
+          
+        //   console.log(`длина фоток сейчас: ${photos.length}`)
+
+        //   if (!groupsToSend.has(groupId)) {
+        //       groupsToSend.set(groupId, { msg: value.data.message, InputMediaPhoto: photos });
+        //   } else {
+        //       let newEntry = groupsToSend.get(groupId)!;
+        //       newEntry.InputMediaPhoto.push(...photos); 
+        //   }
+          
+        // }
+
+        // for (const value of groupsToSend.values()) {
+        //   const message = value.msg
+        //   await tg.replyMediaGroup(message, value.InputMediaPhoto); 
+        // }
   
     }
 

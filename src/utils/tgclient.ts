@@ -7,6 +7,7 @@ export const tg = new TelegramClient({
     apiId: Number(process.env.API_ID!),
     apiHash: process.env.API_HASH!,
     storage: 'bot-data/session',
+    logLevel: 0
     // disableUpdates: true,
 })
 

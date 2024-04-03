@@ -15,7 +15,7 @@ import { dp, tg } from './utils/tgclient.js';
 
 // await deleteClass("Image");
 // await CreateClass("Image")
-await gettAll()
+// await gettAll()
 
 dp.onNewMessage(
     filters.and(
