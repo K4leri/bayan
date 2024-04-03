@@ -1,0 +1,42 @@
+{
+    "name": "tgbot",
+    "license": "MIT",
+    "version": "0.0.0",
+    "main": "dist/index.js",
+    "type": "module",
+    "scripts": {
+        "prepare": "husky || true",
+        "lint": "eslint .",
+        "lint:fix": "eslint --fix .",
+        "format": "prettier --write \"src/**/*.ts\"",
+        "start": "tsc && dotenv node ./dist/index.js",
+        "build": "tsc",
+        "dev": "tsx watch src/index.ts"
+    },
+    "dependencies": {
+        "@mtcute/crypto-node": "^0.10.0",
+        "@mtcute/dispatcher": "^0.10.0",
+        "@mtcute/html-parser": "^0.10.0",
+        "@mtcute/node": "^0.10.0",
+        "@types/pg": "^8.11.4",
+        "dotenv": "^16.4.5",
+        "pg": "^8.11.5",
+        "weaviate-ts-client": "^2.1.1"
+    },
+    "devDependencies": {
+        "@types/node": "^20.12.2",
+        "@typescript-eslint/eslint-plugin": "^7.5.0",
+        "@typescript-eslint/parser": "^7.5.0",
+        "dotenv-cli": "^7.4.1",
+        "eslint": "^8.57.0",
+        "eslint-config-prettier": "^9.1.0",
+        "eslint-import-resolver-typescript": "^3.6.1",
+        "eslint-plugin-ascii": "^1.0.0",
+        "eslint-plugin-import": "^2.29.1",
+        "eslint-plugin-simple-import-sort": "^12.0.0",
+        "husky": "^9.0.11",
+        "lint-staged": "^15.2.2",
+        "prettier": "^3.2.5",
+        "typescript": "^5.4.3"
+    }
+}

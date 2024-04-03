@@ -1,0 +1,8 @@
+CREATE TABLE User (
+    id SERIAL PRIMARY KEY,
+    uuid UUID NOT NULL UNIQUE,
+    message JSONB,
+    groupid BIGINT NOT NULL,
+    firstmessageid BIGINT NOT NULL,
+    time_creation TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+);
