@@ -1,8 +1,30 @@
-CREATE TABLE User (
+CREATE TABLE message (
     id SERIAL PRIMARY KEY,
     uuid UUID NOT NULL UNIQUE,
     message JSONB,
-    groupid BIGINT NOT NULL,
+    chatid BIGINT NOT NULL,
+    groupid BIGINT,
     firstmessageid BIGINT NOT NULL,
     time_creation TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
 );
+
+CREATE TABLE userstat (
+    id SERIAL PRIMARY KEY,
+    chatid BIGINT NOT NULL UNIQUE,
+    bayan JSONB NOT NULL,
+    time_creation TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    last_update TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE OR REPLACE FUNCTION update_last_update_column()
+RETURNS TRIGGER AS $$
+BEGIN
+   NEW.last_update = CURRENT_TIMESTAMP;
+   RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER update_userstat_last_update
+BEFORE UPDATE ON userstat
+FOR EACH ROW
+EXECUTE FUNCTION update_last_update_column();

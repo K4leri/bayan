@@ -7,7 +7,8 @@ import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 import { insertIntoPostgres } from './utils/db.js';
 import { CreateClass, client, deleteClass, gettAll } from './utils/start.js';
-import { processor } from './utils/queue.js';
+// import { processor } from './utils/queue.js';
+import { processor } from './utils/queueSecond.js';
 import { dp, tg } from './utils/tgclient.js';
 
 
@@ -24,16 +25,14 @@ dp.onNewMessage(
         filters.photo,
     ),
     async (msg) => {
-
-        // console.log(msg.chat.id)
         processor.addMessage(msg);
         
         // processor.addMessage(msg.chat.id, msg);
         // console.log(msg.groupedId?.low)
         // console.log(msg.chat.id)
-        const fileid = msg.media.fileId
-        const arrayBuffer = await tg.downloadAsBuffer(fileid)
-        const b64 = Buffer.from(arrayBuffer).toString('base64');
+        // const fileid = msg.media.fileId
+        // const arrayBuffer = await tg.downloadAsBuffer(fileid)
+        // const b64 = Buffer.from(arrayBuffer).toString('base64');
 
     //     try {
     //         const resImage = await client.graphql.get()
@@ -110,3 +109,5 @@ tg.run(
         console.log('Logged in as', user.username)
     },
 )
+
+await gettAll()

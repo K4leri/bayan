@@ -8,3 +8,17 @@ export interface message {
     firstmessageid: bigint; // Similarly, BIGINT is represented as a number
     time_creation: Date; // TIMESTAMP WITH TIME ZONE is best represented by JavaScript's Date object
 }
+
+
+export interface UserStat {
+    id: number;
+    chatid: bigint;
+    bayan: {
+      [userId: string]: { // The user ID as a string maps to an object containing both count and nickname
+        count: number;
+        nickname: string;
+      };
+    };
+    time_creation: Date;
+    last_update: Date;
+}
