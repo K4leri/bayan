@@ -1,13 +1,8 @@
-import { Dispatcher, filters } from '@mtcute/dispatcher'
-import { html } from '@mtcute/html-parser'
-import { InputMedia, InputMediaPhoto, Message, TelegramClient, UploadFileLike, UploadedFile } from '@mtcute/node'
+import { filters } from '@mtcute/dispatcher'
+import { InputMedia, InputMediaPhoto, Message } from '@mtcute/node'
 import { UUID } from "crypto";
 
-import { join, dirname } from 'path';
-import { fileURLToPath } from 'url';
-import { insertIntoPostgres } from './utils/db.js';
-import { CreateClass, client, deleteClass, gettAll } from './utils/weaviatePerStart.js';
-// import { processor } from './utils/queue.js';
+import { CreateClass, deleteClass, gettAll } from './utils/weaviatePerStart.js';
 import { processor } from './bayan/queueMain.js';
 import { bot, botdp, dp, tg } from './utils/tgclient.js';
 import { reCalculate } from './bayan/errorHandler.js';
@@ -16,7 +11,7 @@ import { reCalculate } from './bayan/errorHandler.js';
 
 
 // await deleteClass("Image", '8327120e-bad3-4018-ba4e-12be7275696e');
-// await CreateClass("Image")
+await CreateClass("Image")
 // await gettAll()
 
 dp.onNewMessage(
@@ -64,4 +59,4 @@ tg.run(
     },
 )
 
-await gettAll()
+// await gettAll()

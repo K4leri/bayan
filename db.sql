@@ -1,6 +1,8 @@
+CREATE DATABASE tgclient;
+
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 
-CREATE TABLE message (
+CREATE TABLE IF NOT EXISTS message (
     id SERIAL PRIMARY KEY,
     uuid UUID NOT NULL UNIQUE,
     message JSONB,
@@ -10,7 +12,7 @@ CREATE TABLE message (
     time_creation TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
 );
 
-CREATE TABLE userstat (
+CREATE TABLE IF NOT EXISTS userstat (
     id SERIAL PRIMARY KEY,
     chatid BIGINT NOT NULL UNIQUE,
     bayan JSONB NOT NULL,
@@ -19,7 +21,7 @@ CREATE TABLE userstat (
 );
 
 
-CREATE TABLE errors (
+CREATE TABLE IF NOT EXISTS errors (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   chatid BIGINT NOT NULL UNIQUE,
   userid BIGINT NOT NULL,

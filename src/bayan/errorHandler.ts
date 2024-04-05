@@ -1,5 +1,5 @@
 import { UUID } from "crypto";
-import { deleteById, fetchDataByChatId, selectById, updateBayanByChatId, updateById } from "../utils/db.js";
+import { fetchDataByChatId, selectById, updateBayanByChatId, updateById } from "../utils/db.js";
 import { Message, html } from "@mtcute/node";
 import { tg } from "../utils/tgclient.js";
 import { UserStat } from "../types/sometypes.js";

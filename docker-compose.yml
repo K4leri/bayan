@@ -1,0 +1,69 @@
+version: '3.8'
+
+services:
+  postgresql:
+    image: postgres:latest
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    environment:
+      POSTGRES_PASSWORD: 51kln00bfd54FTY # Change to your actual password
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./db.sql:/docker-entrypoint-initdb.d/db.sql # Mounting the SQL script
+    ports:
+      - "5432:5432"
+    restart: on-failure
+
+  weaviate:
+    image: cr.weaviate.io/semitechnologies/weaviate:1.24.6
+    command:
+      - --host
+      - 0.0.0.0
+      - --port
+      - '8080'
+      - --scheme
+      - http
+    ports:
+      - "8080:8080"
+      - "50051:50051"
+    volumes:
+      - weaviate_data:/var/lib/weaviate
+    restart: on-failure
+    environment:
+      IMAGE_INFERENCE_API: 'http://i2v-neural:8080'
+      QUERY_DEFAULTS_LIMIT: '25'
+      AUTHENTICATION_ANONYMOUS_ACCESS_ENABLED: 'true'
+      PERSISTENCE_DATA_PATH: '/var/lib/weaviate'
+      DEFAULT_VECTORIZER_MODULE: 'img2vec-neural'
+      ENABLE_MODULES: 'img2vec-neural'
+      CLUSTER_HOSTNAME: 'node1'
+
+  i2v-neural:
+    image: cr.weaviate.io/semitechnologies/img2vec-pytorch:resnet50
+    environment:
+      ENABLE_CUDA: '0'
+
+  tgbot:
+    build: .
+    environment:
+      NODE_ENV: production
+    volumes:
+      - .:/usr/src/app
+      - /usr/src/app/node_modules
+    restart: on-failure
+    ports:
+      - '3086:3086' # Adjust if your bot needs to expose any ports
+    depends_on:
+      - postgresql
+      - weaviate
+      - i2v-neural
+
+volumes:
+  weaviate_data: {}
+  postgres_data: {}
+
+
+ 

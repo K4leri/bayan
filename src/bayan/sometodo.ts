@@ -1,4 +1,3 @@
-import { html } from "@mtcute/html-parser";
 import { UserStat } from "../types/sometypes.js";
 import { fetchDataByChatId, updateBayanByChatId } from "../utils/db.js";
 import { TextWithEntities } from "@mtcute/node";

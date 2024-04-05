@@ -1,13 +1,13 @@
 import weaviate, { WeaviateClient}  from 'weaviate-ts-client';
 import { deleteFromMessage, deleteFromUSerStats } from './db.js';
-import fs from 'fs';
 import { tg } from './tgclient.js';
 import { InputMedia, InputMediaPhoto } from '@mtcute/node';
 
 //@ts-ignore
 export const client = weaviate.client({
   scheme: 'http',
-  host: 'localhost:8080',
+  // host: 'localhost:8080', //for local enveriment from my local pc
+  host: 'weaviate:8080', // for docker to docker
 }) as WeaviateClient;
 
 const schemaConfig = {
@@ -83,15 +83,26 @@ export async function gettAll(howMuch: number = 100) {
 }
 
 export async function CreateClass(className: string) {
-      try {
-        await client.schema
-          .classCreator()
-          .withClass(schemaConfig)
+  try {
+      // Attempt to retrieve the class by its name
+      const existingClass = await client.schema
+          .classGetter()
+          .withClassName(className)
           .do();
-          console.log(`Class ${className} has successfull created.`);
-      } catch (error) {
-          console.error(`Error deleting class ${className}:`, error);
+
+      // If the class does not exist, `existingClass` should be undefined or throw an error
+      if (!existingClass) {
+          await client.schema
+              .classCreator()
+              .withClass(schemaConfig) // Ensure `schemaConfig` is defined and includes `className`
+              .do();
+          console.log(`Class ${className} has successfully been created.`);
+      } else {
+          console.log(`Class ${className} already exists. Skipping creation.`);
       }
+  } catch (error) {
+    console.error(error);
+  }
 }
 
 export async function deleteClass(className: string, uuid: string|undefined = undefined) {

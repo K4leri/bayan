@@ -1,3 +1,5 @@
+//@ts-nocheck
+
 import { InputMedia, InputMediaPhoto, Message, UploadedFile, html } from "@mtcute/node";
 import { client } from "./weaviatePerStart.js";
 import { tg } from "./tgclient.js";

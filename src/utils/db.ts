@@ -6,7 +6,8 @@ const { Pool } = pg;
 
 const pool = new Pool({
     user: 'postgres',
-    host: 'localhost',
+    // host: 'localhost',        //for local enveriment from my local pc
+    host: 'tgbot-postgresql-1', // for docker to docker
     database: 'tgclient',
     password: '51kln00bfd54FTY',
     port: 5432,

@@ -1,9 +1,7 @@
-import { InputMedia, InputMediaPhoto, Message, UploadedFile } from "@mtcute/node";
+import { InputMedia, InputMediaPhoto, Message } from "@mtcute/node";
 import { html } from '@mtcute/html-parser'
-import { client } from "../utils/weaviatePerStart.js";
 import { tg } from "../utils/tgclient.js";
-import { fetchDataByChatId, findByUuid, getMessagesByUUIDs, insertIntoPostgres, insertWithChatIdAndCount, updateBayanByChatId } from "../utils/db.js";
-import { BlobOptions } from "buffer";
+import { fetchDataByChatId, findByUuid, getMessagesByUUIDs, insertWithChatIdAndCount } from "../utils/db.js";
 import { UserStat, message } from "../types/sometypes.js";
 import { getHumanReadableTime, updateOrCreateBayanForChat } from "./sometodo.js";
 import { createImageAndInsertIntoPostgres, searchImage } from "../utils/weaviate.js";
