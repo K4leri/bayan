@@ -1,11 +1,12 @@
-import { InputMedia, InputMediaPhoto, Message, UploadedFile, html } from "@mtcute/node";
-import { client } from "./start.js";
-import { tg } from "./tgclient.js";
-import { fetchDataByChatId, findByUuid, getMessagesByUUIDs, insertIntoPostgres, updateBayanByChatId } from "./db.js";
+import { InputMedia, InputMediaPhoto, Message, UploadedFile } from "@mtcute/node";
+import { html } from '@mtcute/html-parser'
+import { client } from "../utils/weaviatePerStart.js";
+import { tg } from "../utils/tgclient.js";
+import { fetchDataByChatId, findByUuid, getMessagesByUUIDs, insertIntoPostgres, insertWithChatIdAndCount, updateBayanByChatId } from "../utils/db.js";
 import { BlobOptions } from "buffer";
 import { UserStat, message } from "../types/sometypes.js";
 import { getHumanReadableTime, updateOrCreateBayanForChat } from "./sometodo.js";
-import { createImageAndInsertIntoPostgres, searchImage } from "./insertTodb.js";
+import { createImageAndInsertIntoPostgres, searchImage } from "../utils/weaviate.js";
 
 
 
@@ -54,13 +55,14 @@ class ChatMessageProcessor {
         
         
         const username = `@${queue.messages[0].sender.username}` ?? queue.messages[0].sender.id
+        const userid = queue.messages[0].sender.id
         // const needToFind = (groupId) ? 5 : 5
         const needToProcess: NeedToProcessMap = {};
 
         const searchimageArray: string[]  = [];
         const functionArray: Function[] = []
         const generalGroupId: GeneralGroupId = {};
-
+        const indexDone: number[] = []
 
         let breakFromLoop = false
         const processedPhotos = new Set<string>(); // Tracks UUIDs of processed photos
@@ -73,55 +75,68 @@ class ChatMessageProcessor {
             const b64 = Buffer.from(arrayBuffer).toString('base64');
             let result = await searchImage(b64, chatId, 0.98, 1)
 
-            if (result.data.Get.Image.length === 0) {
-                // console.log(`${index} - не нашел по одной фотке`)
-                result = await searchImage(b64, chatId, 0.94, 3)
-                // console.log(`${result.data.Get.Image.length} - дополнительных фоток`)
-            }
             const countResultFromVectorDB = result.data.Get.Image.length
-            // let pass = 0
 
             if (countResultFromVectorDB>0) {
-                const newFreeFromSame: { images: string, uuid: string, groupid: number }[] = [];
                 let pass = 0
-                for (let element of result.data.Get.Image) {
-                    if (searchimageArray.includes(element.image)) {
-                        pass++
-                        continue
-                    }
-                    searchimageArray.push(element.image)
-                    const groupId = element.groupid
-                    newFreeFromSame.push({ images: element.image, uuid: element._additional.id, groupid: groupId });
-                    if (!generalGroupId[groupId]) {
-                        generalGroupId[groupId] = {count: 1, data:[{image: element.image, uuid:  element._additional.id, groupid: groupId}]}
-                    } else {
-                        generalGroupId[groupId].count = generalGroupId[groupId].count + 1
-                        generalGroupId[groupId].data.push({image: element.image, uuid:  element._additional.id, groupid: groupId})
-                    }
+                const image = result.data.Get.Image[0].image
+                if (searchimageArray.includes(image)) continue
+                searchimageArray.push(image)
+                const groupId = result.data.Get.Image[0].groupid
 
-                    if (generalGroupId[groupId].count === queuArrayLenght) breakFromLoop = true
-                    console.log(breakFromLoop)
+                if (!generalGroupId[groupId]) {
+                    generalGroupId[groupId] = {count: 1, data:[{image: image, uuid:  result.data.Get.Image[0]._additional.id, groupid: groupId}]}
+                } else {
+                    generalGroupId[groupId].count = generalGroupId[groupId].count + 1
+                    generalGroupId[groupId].data.push({image: image, uuid:  result.data.Get.Image[0]._additional.id, groupid: groupId})
                 }
 
-                if (pass) {
-                    console.log(`${index} - должен был обновить`)
-                    // functionArray.push(() => createImageAndInsertIntoPostgres(b64, message, groupId));
-                }
-                // if (newFreeFromSame.length > 0) {
-                //     needToProcess[index] = { data: newFreeFromSame, count: newFreeFromSame.length };
-                // } else {
-                //     console.log('должен был обновить')
-                //     // functionArray.push(() => createImageAndInsertIntoPostgres(b64, message, groupId));
-                // }
-
-                // if (breakFromLoop) break
-            } 
-
-            else {
+                if (generalGroupId[groupId].count === queuArrayLenght) breakFromLoop = true
+                console.log(breakFromLoop)
+                indexDone.push(index)
+            } else {
                 console.log(`${index} - должен был обновить`)
-                // functionArray.push(() => createImageAndInsertIntoPostgres(b64, message, groupId));
+                functionArray.push(() => createImageAndInsertIntoPostgres(b64, message, groupId));
             }
         }
+
+        for (let [index, message] of queue.messages.entries()) {
+            if (indexDone.includes(index)) continue
+            console.log(`вновь обрабатываю ${index}`)
+            //@ts-ignore
+            const fileid = message.media!.fileId;
+            const chatid = message.chat.id
+            const arrayBuffer = await tg.downloadAsBuffer(fileid);
+            const b64 = Buffer.from(arrayBuffer).toString('base64');
+            const result = await searchImage(b64, chatId, 0.94, 3)
+            const countResultFromVectorDB = result.data.Get.Image.length
+            console.log(`${index} - результат вторйо проверки - ${countResultFromVectorDB}`)
+            if (countResultFromVectorDB>0) {
+
+                const extendedMessage = findByUuid(result.data.Get.Image[0]._additional.id, chatId) as Promise<message>
+                let pass = 0
+
+                for (let i=0; i<countResultFromVectorDB; i++) {
+                    const image = result.data.Get.Image[0].image
+                    if (searchimageArray.includes(image)) continue
+                    pass++
+                    searchimageArray.push(image)
+                    const groupId = result.data.Get.Image[0].groupid
+    
+                    if (!generalGroupId[groupId]) {
+                        generalGroupId[groupId] = {count: 1, data:[{image: image, uuid:  result.data.Get.Image[0]._additional.id, groupid: groupId}]}
+                    } else {
+                        generalGroupId[groupId].count = generalGroupId[groupId].count + 1
+                        generalGroupId[groupId].data.push({image: image, uuid:  result.data.Get.Image[0]._additional.id, groupid: groupId})
+                    }
+                    
+                }
+
+                if (pass) functionArray.splice(index, 1)
+            }
+        }
+
+
 
         if (functionArray.length>0) await Promise.all(functionArray.map(func => func()));
         
@@ -188,7 +203,8 @@ class ChatMessageProcessor {
                 fileName: 'some.jpg'
             })
 
-            files.push(InputMedia.photo(data, {caption:  html`Если нет ни одной схожей фотки, то пропиши <br><code>/err </code> <br><br>Сообщение от @${username}<br>от ${humanReadable}<br><br>${addToText}`}))
+            const erroruuid = await insertWithChatIdAndCount(chatId, imgLenght+1, userid)
+            files.push(InputMedia.photo(data, {caption:  html`Если нет ни одной схожей фотки, то пропиши <br><code>/err ${erroruuid}</code> <br><br>Сообщение от @${username}<br>от ${humanReadable}<br><br>${html(addToText)}`}))
 
             console.log('уже тут')
             return  await tg.replyMediaGroup(extendedMessage.message, files); 
@@ -197,17 +213,19 @@ class ChatMessageProcessor {
 
 
 
-        let messageToAnswer: {files: InputMediaPhoto[], extendedMessage: message }[] = []
+        // let messageToAnswer: {files: InputMediaPhoto[], extendedMessage: message }[] = []
 
 
         for (const [index, value] of Object.entries(generalGroupId)) {
             const photosLenght = value.data.length
 
             let InputMediaPhoto: InputMediaPhoto[] = [];
-            let uuidArray: string[] = []
+            // let uuidArray: string[] = []
             
-            const message = findByUuid(value.data[0].uuid, chatId) as Promise<message>
-      
+            const extendedMessage = findByUuid(value.data[0].uuid, chatId) as Promise<message>
+            const count = (queuArrayLenght === 1) ? 1 : photosLenght
+            const erroruuid = await insertWithChatIdAndCount(chatId, count, userid)
+
             for (let i=0; i<photosLenght; i++) {
                 const b64 = value.data[i].image
                 
@@ -235,26 +253,24 @@ class ChatMessageProcessor {
                 if (i !== photosLenght-1) {
                     file = InputMedia.photo(data)
                 } else {
-                    const humanReadable = getHumanReadableTime((await message).message.date)
+                    const humanReadable = getHumanReadableTime((await extendedMessage).message.date)
                     console.log(`длина баянов ${photosLenght}`)
-                    const addToText = await updateOrCreateBayanForChat(chatId, queue.messages[0].sender.id.toString(), username, photosLenght)
-                    file = InputMedia.photo(data, {caption: html`Если нет ни одной схожей фотки, то пропиши <br><code>/err </code> <br><br>Сообщение от @${username}<br>от ${humanReadable}<br><br>${addToText}`})
+                    const addToText = await updateOrCreateBayanForChat(chatId, queue.messages[0].sender.id.toString(), username, count)
+                    file = InputMedia.photo(data, {caption: html`Если нет ни одной схожей фотки, то пропиши <br><code>/err ${erroruuid}</code> <br><br>Сообщение от @${username}<br>от ${humanReadable}<br><br>${html(addToText)}`})
                 }
                 
                 InputMediaPhoto.push(file)
-                uuidArray.push(uuid)
+                // uuidArray.push(uuid)
             }
 
             console.log('InputMediaPhoto готов')
-            // generalUUID.concat(uuidArray)
-            
-            messageToAnswer.push({files: InputMediaPhoto, extendedMessage: await message as message})   
+            // messageToAnswer.push({files: InputMediaPhoto, extendedMessage: await extendedMessage as message})
+            tg.replyMediaGroup((await extendedMessage).message, InputMediaPhoto);   
         }
         
-
-        for (let [index, value] of messageToAnswer.entries()) {
-            await tg.replyMediaGroup(value.extendedMessage.message, value.files); 
-        }
+        // for (let [index, value] of messageToAnswer.entries()) {
+        //     await tg.replyMediaGroup(value.extendedMessage.message, value.files); 
+        // }
         // console.log(needToProcess)
 
         delete this.queues[chatId];

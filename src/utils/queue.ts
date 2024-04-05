@@ -1,10 +1,10 @@
 import { InputMedia, InputMediaPhoto, Message, UploadedFile, html } from "@mtcute/node";
-import { client } from "./start.js";
+import { client } from "./weaviatePerStart.js";
 import { tg } from "./tgclient.js";
 import { fetchDataByChatId, findByUuid, getMessagesByUUIDs, insertIntoPostgres, updateBayanByChatId } from "./db.js";
 import { BlobOptions } from "buffer";
 import { UserStat, message } from "../types/sometypes.js";
-import { getHumanReadableTime } from "./sometodo.js";
+import { getHumanReadableTime } from "../bayan/sometodo.js";
 
 interface ImageDataWithExtras {
   b64: string;
@@ -58,7 +58,7 @@ class ChatMessageProcessor {
         console.log(`chatid - ${chatid}`)
         const result = await client.graphql.get()
           .withClassName('Image')
-          .withFields('image chatid _additional {id}') // Include both 'id' and 'image' here
+          .withFields('image groupid _additional {id}') // Include both 'id' and 'image' here
           // .withFields('image') // Include both 'id' and 'image' here
           .withNearImage({
             image: b64,
@@ -69,6 +69,7 @@ class ChatMessageProcessor {
             path: ['chatid'],
             valueInt: chatid // Replace `specificChatId` with the actual chat ID you're interested in.
           })
+
           .withLimit(5)
           .do()
         
@@ -85,7 +86,10 @@ class ChatMessageProcessor {
         console.log(`нашел количество фоток - ${result.data.Get.Image.length}`)
         const mappingResult: true|undefined = result.data.Get.Image.some((el: {_additional: {id: string}, image: string}) => {
           uuidArray.push(el._additional.id);
-          if (!imageArray.includes(el.image)) {
+          if (!/* The above code appears to be a comment block in TypeScript. It mentions an
+          `imageArray` variable and a question about its purpose, but the actual code or logic
+          is not provided within the comment block. */
+          imageArray.includes(el.image)) {
             imageArray.push(el.image);
             console.log('вышел')
             return queuArrayLenght === imageArray.length; // Will stop iterating once this is true

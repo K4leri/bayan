@@ -1,5 +1,7 @@
+import { html } from "@mtcute/html-parser";
 import { UserStat } from "../types/sometypes.js";
-import { fetchDataByChatId, updateBayanByChatId } from "./db.js";
+import { fetchDataByChatId, updateBayanByChatId } from "../utils/db.js";
+import { TextWithEntities } from "@mtcute/node";
 
 export function getHumanReadableTime(timestamp: string | number | Date) {
     const date = new Date(timestamp);
@@ -30,5 +32,5 @@ export async function updateOrCreateBayanForChat(chatid: number, userIdStr: stri
 
     const bayanArray = Object.entries(bayanData);
     const sortedBayanArray = bayanArray.sort((a, b) => b[1].count - a[1].count);
-    return sortedBayanArray.map(([userId, {nickname, count}]) => `${nickname}: ${count}`).join('<br>');
+    return sortedBayanArray.map(([userId, {nickname, count}]) => `${nickname}: ${count}<br>`).join('')
 }

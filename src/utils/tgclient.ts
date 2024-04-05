@@ -11,4 +11,13 @@ export const tg = new TelegramClient({
     // disableUpdates: true,
 })
 
+export const bot = new TelegramClient({
+    apiId: Number(process.env.API_ID!),
+    apiHash: process.env.API_HASH!,
+    storage: 'bot-data/session',
+    logLevel: 0
+    // disableUpdates: true,
+})
+
 export const dp = Dispatcher.for(tg)
+export const botdp = Dispatcher.for(bot)

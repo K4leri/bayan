@@ -1,5 +1,5 @@
 import { insertIntoPostgres } from "./db.js";
-import { client } from "./start.js";
+import { client } from "./weaviatePerStart.js";
 
 
 export async function createImageAndInsertIntoPostgres(b64Image: string, message: any, groupId: number) {

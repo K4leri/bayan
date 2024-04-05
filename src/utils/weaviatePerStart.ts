@@ -55,9 +55,8 @@ export async function gettAll(howMuch: number = 100) {
     })
 
     // array.map((el) =>{
-    //   console.log(el.image.substring(0, 40))
+    //   console.log(el.uuid)
     // })
-    // console.log(array)
 
 
     // const lastThreeElements = array.slice(-10);
@@ -79,7 +78,7 @@ export async function gettAll(howMuch: number = 100) {
 
 
   } catch (error) {
-      console.error(`Error deleting class:`, error);
+      console.error(error);
   }
 }
 

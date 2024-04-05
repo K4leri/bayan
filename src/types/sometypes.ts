@@ -22,3 +22,12 @@ export interface UserStat {
     time_creation: Date;
     last_update: Date;
 }
+
+
+export interface ErrorRecord {
+  id: string; // Assuming UUID is represented as a string
+  chatid: bigint;
+  count?: number;
+  time_creation?: Date;
+  last_update?: Date;
+}

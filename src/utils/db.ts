@@ -1,5 +1,6 @@
 import pg, { DatabaseError } from 'pg';
-import { UserStat, message } from '../types/sometypes.js';
+import { ErrorRecord, UserStat, message } from '../types/sometypes.js';
+import { UUID } from 'crypto';
 const { Pool } = pg;
 
 
@@ -27,36 +28,6 @@ export async function insertIntoPostgres(uuid: string, message: any, groupid: nu
     return null; // It's helpful to explicitly return null or some error indicator in case of failure
   }
 }
-
-
-// export async function insertIntoPostgres(uuid: string, message: any, groupid: number | null, firstmessageid: number, chatid: number) {
-  
-  
-//   const query = (groupid) ? `
-//     INSERT INTO message(uuid, message, groupid, firstmessageid, chatid)
-//     VALUES($1, $2, $3, $4, $5)
-//   ` 
-//   : `INSERT INTO message(uuid, message, firstmessageid, chatid)
-//     VALUES($1, $2, $3, $4)
-//   `
-  
-//   try {
-//     if (groupid) {
-//       console.log(groupid)
-//       console.log('пытаюсь c группой')
-//       await pool.query(query, [uuid, message, groupid, firstmessageid, chatid]);
-//     } else {
-//       console.log(groupid)
-//       console.log('пытаюсь без группы')
-//       await pool.query(query, [uuid, message, firstmessageid, chatid]);
-//     }
-//     // console.log('Insertion successful, new row id:', res.rows[0].id);
-//     // return res.rows[0].id; // Return the new row's ID
-//   } catch (err) {
-//     console.error('Error inserting into PostgreSQL:', err);
-//     return null; // It's helpful to explicitly return null or some error indicator in case of failure
-//   }
-// }
 
 
 export async function findByUuid(uuid: string, chatid: number): Promise<message|undefined> {
@@ -118,26 +89,7 @@ export async function deleteFromUSerStats(): Promise<void|null> {
 
 
 
-export async function insertUserStatistic(chatid: number, userid: bigint, value: number) {
-  const bayan = JSON.stringify({ userid: userid, value: value });
-
-  const query = `
-    INSERT INTO user_statistics (chatid, bayan)
-    VALUES ($1, $2)
-    RETURNING *;
-  `;
-
-  try {
-    const res = await pool.query(query, [chatid, bayan]);
-    console.log(res.rows[0]); // Output the inserted row
-  } catch (err) {
-    console.error('Error inserting into user_statistics:', err);
-  }
-}
-
-
-
-export async function fetchDataByChatId(chatid: number): Promise<UserStat | null | {}> {
+export async function fetchDataByChatId(chatid: number): Promise<UserStat | null> {
   const query = `
     SELECT * FROM userstat
     WHERE chatid = $1;
@@ -178,5 +130,51 @@ export async function updateBayanByChatId(chatid: number, newBayanData: { [userI
   } catch (err) {
     console.error('Error updating userstat:', err);
     return false; // Indicates error
+  }
+}
+
+
+export async function insertWithChatIdAndCount(chatid: number, count: number, userid: number): Promise<UUID> {
+  try {
+   
+    const queryText = 'INSERT INTO errors (chatid, count, userid) VALUES ($1, $2, $3) RETURNING id;';
+    const res = await pool.query(queryText, [chatid, count, userid]);
+
+    return res.rows[0].id;
+  } catch (err) {
+    console.error('Error executing insertWithChatIdAndCount:', err);
+    throw err; // Rethrow the error for further handling, if necessary
+  }
+}
+
+
+export async function selectById(id: UUID): Promise<{ chatid: number; count: number }> {
+  try {
+    const queryText = 'SELECT chatid, count FROM errors WHERE id = $1;';
+    const res = await pool.query(queryText, [id]);
+    return res.rows[0]; // Return the first row (assuming id is unique)
+  } catch (err) {
+    console.error('Error executing selectById:', err);
+    throw err; // Rethrow the error for further handling, if necessary
+  }
+}
+
+export async function deleteById(id: UUID): Promise<void> {
+  try {
+    const queryText = 'DELETE from errors WHERE id = $1;';
+    await pool.query(queryText, [id]);
+  } catch (err) {
+    console.error('Error executing selectById:', err);
+    throw err; // Rethrow the error for further handling, if necessary
+  }
+}
+
+export async function updateById(id: UUID, count: number): Promise<void> {
+  try {
+    const queryText = 'UPDATE errors SET count = $1 WHERE id = $2;';
+    await pool.query<ErrorRecord>(queryText, [count, id]);
+  } catch (err) {
+    console.error('Error executing selectById:', err);
+    throw err; // Rethrow the error for further handling, if necessary
   }
 }

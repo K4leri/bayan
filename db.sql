@@ -1,10 +1,12 @@
+CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+
 CREATE TABLE message (
     id SERIAL PRIMARY KEY,
     uuid UUID NOT NULL UNIQUE,
     message JSONB,
     chatid BIGINT NOT NULL,
     groupid BIGINT,
-    firstmessageid BIGINT NOT NULL,
+    firstmessageid BIGINT,
     time_creation TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
 );
 
@@ -16,11 +18,22 @@ CREATE TABLE userstat (
     last_update TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
+
+CREATE TABLE errors (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  chatid BIGINT NOT NULL UNIQUE,
+  userid BIGINT NOT NULL,
+  count INT,
+  time_creation TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+  last_update TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+
 CREATE OR REPLACE FUNCTION update_last_update_column()
 RETURNS TRIGGER AS $$
 BEGIN
    NEW.last_update = CURRENT_TIMESTAMP;
-   RETURN NEW;
+   RETURN NEW;`
 END;
 $$ LANGUAGE plpgsql;
 

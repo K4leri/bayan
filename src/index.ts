@@ -1,20 +1,21 @@
 import { Dispatcher, filters } from '@mtcute/dispatcher'
 import { html } from '@mtcute/html-parser'
 import { InputMedia, InputMediaPhoto, Message, TelegramClient, UploadFileLike, UploadedFile } from '@mtcute/node'
-
+import { UUID } from "crypto";
 
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 import { insertIntoPostgres } from './utils/db.js';
-import { CreateClass, client, deleteClass, gettAll } from './utils/start.js';
+import { CreateClass, client, deleteClass, gettAll } from './utils/weaviatePerStart.js';
 // import { processor } from './utils/queue.js';
-import { processor } from './utils/queueSecond.js';
-import { dp, tg } from './utils/tgclient.js';
+import { processor } from './bayan/queueMain.js';
+import { bot, botdp, dp, tg } from './utils/tgclient.js';
+import { reCalculate } from './bayan/errorHandler.js';
 
 
 
 
-// await deleteClass("Image");
+// await deleteClass("Image", '8327120e-bad3-4018-ba4e-12be7275696e');
 // await CreateClass("Image")
 // await gettAll()
 
@@ -25,75 +26,21 @@ dp.onNewMessage(
         filters.photo,
     ),
     async (msg) => {
-        processor.addMessage(msg);
-        
-        // processor.addMessage(msg.chat.id, msg);
-        // console.log(msg.groupedId?.low)
-        // console.log(msg.chat.id)
-        // const fileid = msg.media.fileId
-        // const arrayBuffer = await tg.downloadAsBuffer(fileid)
-        // const b64 = Buffer.from(arrayBuffer).toString('base64');
-
-    //     try {
-    //         const resImage = await client.graphql.get()
-    //             .withClassName('Image')
-    //             .withFields('image')
-    //             .withNearImage({ 
-    //                 image: b64,
-    //                 certainty: 0.92
-    //             })
-    //             .withLimit(5)
-    //             .do();
-
-    //         // console.log(JSON.stringify(resImage, null, 2));
-
-    //         if (resImage.data?.Get?.Image.length>0) {
-    //             const array: string[] = resImage.data?.Get?.Image.map((el: {image: string}) => el.image)
-    //             const base64: string = array[0];
-    //             const buffer = Buffer.from(base64, 'base64');
-
-    //             let results: InputMediaPhoto[] = [];
-    //             const maxArraySize = array.length - 1
-
-    //             for (let [index, el] of array.entries()) {
-    //                 const data = await tg.uploadFile({
-    //                     file: Buffer.from(el, 'base64'),
-    //                     fileName: 'some.jpg'
-    //                 })
-    //                 if (index !== maxArraySize) {
-    //                     results.push(InputMedia.photo(data))
-    //                 } else {
-    //                     results.push(InputMedia.photo(data, {caption: html`Если какая-либо из фотографий не совыпадает, то пропиши <code>/err</code>`}))
-    //                 }
-    //             }
-
-    //             // await tg.replyMediaGroup(results)
-    //             await msg.answerMediaGroup(results)
-    //             // const message: Message
-    //             // await tg.replyText(message, 'Хочу глянуть, как работает')
-    //             // const messsage = await msg.getReplyTo()
-    //             // console.log(messsage)
-                
-            
-    //         } else {
-    //             console.log('должен был загрузить новый')
-    //             const result = await client.data.creator()
-    //               .withClassName('Image')
-    //               .withProperties({
-    //                 image: b64,
-    //               })
-    //               .do();
-                
-    //             await insertIntoPostgres(result.id, msg)
-    //         }  
-
-    //     } catch (e) {
-    //         console.log(e)
-    //     }
-        
+        processor.addMessage(msg);    
     }
 );
 
+dp.onNewMessage(
+    filters.and(
+        (msg: Message) => /\/err\s([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})(?:\s(\d+))?/g.test(msg.text), // Using test() method and nullish coalescing operator
+        filters.chat('private'),
+        filters.photo,
+    ),
+    async (msg) => {
+        const textArray = msg.text.split(' ')
+        await reCalculate(msg, textArray[1] as UUID, textArray[2] ? Number(textArray[2]) : undefined); 
+    }
+);
 // tg.run({
 //     phone: () => tg.input('Phone > '),
 //     code: () => tg.input('Code > '),
@@ -101,6 +48,13 @@ dp.onNewMessage(
 //   }, async (self) => {
 //     console.log(`Logged in as ${self.displayName}`)
 //   })
+
+
+// bot.run({
+//     botToken: process.env.BOT_TOKEN,
+//   }, async (self) => {
+//     console.log(`Logged in as ${self.displayName}`)
+// })
 
 
 tg.run(
