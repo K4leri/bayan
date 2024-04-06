@@ -84,26 +84,37 @@ export async function gettAll(howMuch: number = 100) {
 
 export async function CreateClass(className: string) {
   try {
-      // Attempt to retrieve the class by its name
-      const existingClass = await client.schema
-          .classGetter()
-          .withClassName(className)
-          .do();
+    // Attempt to get the class
+    const existingClass = await client.schema
+      .classGetter()
+      .withClassName("Image")
+      .do();
 
-      // If the class does not exist, `existingClass` should be undefined or throw an error
-      if (!existingClass) {
-          await client.schema
-              .classCreator()
-              .withClass(schemaConfig) // Ensure `schemaConfig` is defined and includes `className`
-              .do();
-          console.log(`Class ${className} has successfully been created.`);
-      } else {
-          console.log(`Class ${className} already exists. Skipping creation.`);
+    // If the class exists, log a message or handle accordingly
+    // console.log(`Class ${className} already exists.`);
+    console.log(existingClass)
+  } catch (error: any) {
+    // If the class does not exist (404 error), create the class
+    if (error.message.includes('404')) {
+      try {
+        console.log('Создаю класс')
+        // Attempt to create the class
+        await client.schema
+          .classCreator()
+          .withClass(schemaConfig)
+          .do();
+        console.log(`Class ${className} created successfully.`);
+      } catch (creationError) {
+        // Handle any errors that occur during class creation
+        console.error(`Error creating class ${className}:`, creationError);
       }
-  } catch (error) {
-    console.error(error);
+    } else {
+      // If the error is not a 404, log or handle it as needed
+      console.error(`Error fetching class ${className}:`, error);
+    }
   }
 }
+
 
 export async function deleteClass(className: string, uuid: string|undefined = undefined) {
     try {

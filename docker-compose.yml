@@ -10,9 +10,10 @@ services:
       retries: 5
     environment:
       POSTGRES_PASSWORD: 51kln00bfd54FTY # Change to your actual password
+      POSTGRES_DB: tgclient
     volumes:
       - postgres_data:/var/lib/postgresql/data
-      - ./db.sql:/docker-entrypoint-initdb.d/db.sql # Mounting the SQL script
+      - ./init.sql:/docker-entrypoint-initdb.d/init.sql
     ports:
       - "5432:5432"
     restart: on-failure

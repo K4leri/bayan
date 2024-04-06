@@ -59,4 +59,4 @@ tg.run(
     },
 )
 
-// await gettAll()
+await gettAll()

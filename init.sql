@@ -1,15 +1,15 @@
-CREATE DATABASE tgclient;
+-- CREATE DATABASE tgclient;
 
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 
-CREATE TABLE IF NOT EXISTS message (
+CREATE TABLE message (
     id SERIAL PRIMARY KEY,
     uuid UUID NOT NULL UNIQUE,
     message JSONB,
     chatid BIGINT NOT NULL,
     groupid BIGINT,
     firstmessageid BIGINT,
-    time_creation TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    time_creation TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
 CREATE TABLE IF NOT EXISTS userstat (
@@ -35,7 +35,7 @@ CREATE OR REPLACE FUNCTION update_last_update_column()
 RETURNS TRIGGER AS $$
 BEGIN
    NEW.last_update = CURRENT_TIMESTAMP;
-   RETURN NEW;`
+   RETURN NEW;
 END;
 $$ LANGUAGE plpgsql;
 
