@@ -6,8 +6,8 @@ import { InputMedia, InputMediaPhoto } from '@mtcute/node';
 //@ts-ignore
 export const client = weaviate.client({
   scheme: 'http',
-  // host: 'localhost:8080', //for local enveriment from my local pc
-  host: 'weaviate:8080', // for docker to docker
+  host: 'localhost:8080', //for local enveriment from my local pc
+  // host: 'weaviate:8080', // for docker to docker
 }) as WeaviateClient;
 
 const schemaConfig = {
@@ -38,6 +38,10 @@ const schemaConfig = {
           'name': 'groupid',
           'dataType': ['int']
       },
+      {
+          'name': 'platform',
+          'dataType': ['string']
+      },
     ]
 }
   
@@ -46,17 +50,18 @@ export async function gettAll(howMuch: number = 100) {
   try {
     const results = await client.graphql.get()
         .withClassName("Image")
-        .withFields("image _additional { creationTimeUnix, id }") // Specify the fields you want to retrieve
+        .withFields("image groupid _additional { creationTimeUnix, id }") // Specify the fields you want to retrieve
         .withLimit(howMuch) // Set a limit to the number of records to fetch
         .withSort([{ path: ['_creationTimeUnix'] }])
         .do();
-    const array = results.data?.Get?.Image.map((el: {image: string, _additional: {creationTimeUnix: Date, id: string}}) => {
-      return {image: el.image/*el.image.substring(0, 40)*/, time: el._additional.creationTimeUnix, uuid: el._additional.id}
+    const array = results.data?.Get?.Image.map((el: {image: string, groupid: number, _additional: {creationTimeUnix: Date, id: string}}) => {
+      return {image: el.image/*el.image.substring(0, 40)*/, time: el._additional.creationTimeUnix, uuid: el._additional.id, groupid: el.groupid}
     })
 
-    // array.map((el) =>{
-    //   console.log(el.uuid)
-    // })
+    console.log(array)
+    array.map((el: {uuid: string, groupid: string}) =>{
+      console.log(`uuid - ${el.uuid}    groupid - ${el.groupid}`)
+    })
 
 
     // const lastThreeElements = array.slice(-10);
@@ -92,7 +97,7 @@ export async function CreateClass(className: string) {
 
     // If the class exists, log a message or handle accordingly
     // console.log(`Class ${className} already exists.`);
-    console.log(existingClass)
+    // console.log(existingClass)
   } catch (error: any) {
     // If the class does not exist (404 error), create the class
     if (error.message.includes('404')) {

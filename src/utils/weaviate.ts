@@ -1,16 +1,17 @@
+import { platform } from "os";
 import { insertIntoPostgres } from "./db.js";
 import { client } from "./weaviatePerStart.js";
 
 
-export async function createImageAndInsertIntoPostgres(b64Image: string, message: any, groupId: number) {
+export async function createImageAndInsertIntoPostgres(b64Image: string, message: any, groupId: number, platform: string, chatIdtrue: number) {
     try {
-        // Assuming 'client' is your Weaviate client instance
         const creationResult = await client.data.creator()
             .withClassName('Image')
             .withProperties({
                 image: b64Image,
-                chatid: message.chat.id,
-                groupid: groupId
+                chatid: chatIdtrue,
+                groupid: groupId,
+                platform: platform
             })
             .do();
 
@@ -22,9 +23,9 @@ export async function createImageAndInsertIntoPostgres(b64Image: string, message
         }
 
         // Assuming 'insertIntoPostgres' is a function you've defined to insert the data into PostgreSQL
-        await insertIntoPostgres(uuid, message, groupId, message.chat.id);
+        await insertIntoPostgres(uuid, message, groupId, chatIdtrue, platform);
 
-        console.log(`${message.chat.id} - Insertion successful`);
+        console.log(`${chatIdtrue} - Insertion successful`);
 
     } catch (err) {
         console.error('Error creating image and inserting into PostgreSQL:', err);
@@ -38,19 +39,20 @@ interface ImageDataWithExtras {
             _additional: { id: string };
             image: string;
             groupid: number;
+            platform: 'TG'|'VK';
           }[];
         };
     }
 }
 
 export async function searchImage(b64: string, chatid: number, certainty: number, needToFind: number) {
-    const result = await client.graphql.get()
+    return await client.graphql.get()
         .withClassName('Image')
-        .withFields('image groupid _additional {id}') // Include both 'id' and 'image' here
+        .withFields('image groupid platform _additional {id}') // Include both 'id' and 'image' here
         // .withFields('image') // Include both 'id' and 'image' here
         .withNearImage({
-        image: b64,
-        certainty: certainty
+            image: b64,
+            certainty: certainty
         })
         .withWhere({
             operator: 'Equal',
@@ -60,7 +62,5 @@ export async function searchImage(b64: string, chatid: number, certainty: number
         // .withOffset(3)
         .withLimit(needToFind)
         .do() as ImageDataWithExtras
-    
-    return result
 }
 

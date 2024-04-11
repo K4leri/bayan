@@ -8,6 +8,18 @@ CREATE TABLE message (
     message JSONB,
     chatid BIGINT NOT NULL,
     groupid BIGINT,
+    platform TEXT,
+    firstmessageid BIGINT,
+    time_creation TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE settings (
+    id SERIAL PRIMARY KEY,
+    chatid BIGINT NOT NULL,
+    tgchatid BIGINT,
+    vkchatid BIGINT,
+    username JSONB,
+    should_create BOOLEAN DEFAULT TRUE,
     firstmessageid BIGINT,
     time_creation TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
@@ -20,12 +32,15 @@ CREATE TABLE IF NOT EXISTS userstat (
     last_update TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
-
 CREATE TABLE IF NOT EXISTS errors (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-  chatid BIGINT NOT NULL UNIQUE,
+  id SERIAL PRIMARY KEY,
+  key UUID DEFAULT uuid_generate_v4(),
+  chatid BIGINT NOT NULL,
   userid BIGINT NOT NULL,
+  platform TEXT,
   count INT,
+  message JSONB,
+  errorMessage JSONB,
   time_creation TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
   last_update TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );

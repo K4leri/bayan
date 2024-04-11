@@ -1,10 +1,16 @@
 import { InputMedia, InputMediaPhoto, Message } from "@mtcute/node";
-import { html } from '@mtcute/html-parser'
+import { html } from "@mtcute/node";
 import { tg } from "../utils/tgclient.js";
-import { fetchDataByChatId, findByUuid, getMessagesByUUIDs, insertWithChatIdAndCount } from "../utils/db.js";
-import { UserStat, message } from "../types/sometypes.js";
-import { getHumanReadableTime, updateOrCreateBayanForChat } from "./sometodo.js";
+import { fetchDataByChatId, findByUuid, getChatIdByPlatformId, getMessagesByUUIDs, insertWithChatIdAndCount } from "../utils/db.js";
+import { GeneralGroupId, UserStat, message } from "../types/sometypes.js";
+import { generateRandomDigits, getHumanReadableTime, updateOrCreateBayanForChat } from "./sometodo.js";
 import { createImageAndInsertIntoPostgres, searchImage } from "../utils/weaviate.js";
+import { getTelegramPhotoBase64, platform, processMessageQueue } from "../utils/action.js";
+import { Attachment, ContextDefaultState, ExternalAttachment, IUploadSourceMedia, MessageContext, PhotoAttachment, WallAttachment } from "vk-io";
+import { joinTextWithEntities } from "@mtcute/core/utils.js";
+import { vk } from "../utils/vkclient.js";
+import { replyText } from "@mtcute/core/methods.js";
+import { error } from "console";
 
 
 
@@ -14,26 +20,45 @@ interface ProcessEntry {
     count: number;
 }
 
-interface NeedToProcessMap {
-    [key: string]: {
-        data: {images: string, uuid: string, groupid: number}[];
-        count: number;
-    }; // Using string keys because JavaScript object keys are strings
+interface BaseQueueItem {
+    timer?: NodeJS.Timeout;
+    username: string;
+    userid: number;
+    chatIdtrue?: number;
 }
 
-interface GeneralGroupId {
-    [key: string]: {
-        count: number;
-        data: {
-            image: string;
-            uuid: string;
-            groupid: number
-        }[]
-    };
+interface TGQueueItem extends BaseQueueItem {
+    platform: 'TG';
+    messages: Message[]; // For TG, messages are of type Message[]
 }
+
+interface VKQueueItem extends BaseQueueItem {
+    platform: 'VK';
+    messages: PhotoAttachment[]; // For VK, messages are PhotoAttachments
+}
+
+type QueueItem = TGQueueItem | VKQueueItem;
+
+
+
 
 class ChatMessageProcessor {
-    private queues: { [chatId: string]: { [groupedId: string]: { messages: Message[]; timer?: NodeJS.Timeout } } };
+    // private queues: { [chatId: string]: { [groupedId: string]: QueueItem } };
+    private queues: 
+    { [chatId: string]: 
+        { [groupedId: string]: 
+            { 
+                messages: (Message | PhotoAttachment)[];
+                timer?: NodeJS.Timeout ;
+                username: string;
+                userid: number;
+                platform: 'VK'|'TG'
+                chatIdtrue: number|undefined;
+                context?: MessageContext<ContextDefaultState> & object
+                tgchatid?: number
+            } 
+        } 
+    };
   
     constructor() {
       this.queues = {};
@@ -44,267 +69,242 @@ class ChatMessageProcessor {
 
 
     async processQueue(chatId: number, groupId: number) {
-        // Example: Process messages for a specific chatId
-        // console.log('начал выполнять')
+
         const queue = this.queues[chatId]?.[groupId];
-
+        delete this.queues[chatId];
+        
         const queuArrayLenght = queue.messages.length
-        console.log(`Processing ${queuArrayLenght} messages for chat ${chatId}`);
-        
-        
-        const username = `@${queue.messages[0].sender.username}` ?? queue.messages[0].sender.id
-        const userid = queue.messages[0].sender.id
-        // const needToFind = (groupId) ? 5 : 5
-        const needToProcess: NeedToProcessMap = {};
 
-        const searchimageArray: string[]  = [];
-        const functionArray: Function[] = []
-        const generalGroupId: GeneralGroupId = {};
-        const indexDone: number[] = []
+        const username = queue.username
+        const userid = queue.userid
+        console.log(`queue userid is ${userid}`)
+        const localeplatform = queue.platform
+        const chatIdtrue = queue.chatIdtrue as number
+        // console.log('---------------------------------------------------------')
+        // console.log(`-----------------groupId is ${groupId}-------------------`)
+        // console.log('---------------------------------------------------------')
 
-        let breakFromLoop = false
-        const processedPhotos = new Set<string>(); // Tracks UUIDs of processed photos
-
-        for (let [index, message] of queue.messages.entries()) {
-            //@ts-ignore
-            const fileid = message.media!.fileId;
-            const chatid = message.chat.id
-            const arrayBuffer = await tg.downloadAsBuffer(fileid);
-            const b64 = Buffer.from(arrayBuffer).toString('base64');
-            let result = await searchImage(b64, chatId, 0.98, 1)
-
-            const countResultFromVectorDB = result.data.Get.Image.length
-
-            if (countResultFromVectorDB>0) {
-                let pass = 0
-                const image = result.data.Get.Image[0].image
-                if (searchimageArray.includes(image)) continue
-                searchimageArray.push(image)
-                const groupId = result.data.Get.Image[0].groupid
-
-                if (!generalGroupId[groupId]) {
-                    generalGroupId[groupId] = {count: 1, data:[{image: image, uuid:  result.data.Get.Image[0]._additional.id, groupid: groupId}]}
-                } else {
-                    generalGroupId[groupId].count = generalGroupId[groupId].count + 1
-                    generalGroupId[groupId].data.push({image: image, uuid:  result.data.Get.Image[0]._additional.id, groupid: groupId})
-                }
-
-                if (generalGroupId[groupId].count === queuArrayLenght) breakFromLoop = true
-                console.log(breakFromLoop)
-                indexDone.push(index)
-            } else {
-                console.log(`${index} - должен был обновить`)
-                functionArray.push(() => createImageAndInsertIntoPostgres(b64, message, groupId));
-            }
-        }
-
-        for (let [index, message] of queue.messages.entries()) {
-            if (indexDone.includes(index)) continue
-            console.log(`вновь обрабатываю ${index}`)
-            //@ts-ignore
-            const fileid = message.media!.fileId;
-            const chatid = message.chat.id
-            const arrayBuffer = await tg.downloadAsBuffer(fileid);
-            const b64 = Buffer.from(arrayBuffer).toString('base64');
-            const result = await searchImage(b64, chatId, 0.94, 3)
-            const countResultFromVectorDB = result.data.Get.Image.length
-            console.log(`${index} - результат вторйо проверки - ${countResultFromVectorDB}`)
-            if (countResultFromVectorDB>0) {
-
-                const extendedMessage = findByUuid(result.data.Get.Image[0]._additional.id, chatId) as Promise<message>
-                let pass = 0
-
-                for (let i=0; i<countResultFromVectorDB; i++) {
-                    const image = result.data.Get.Image[0].image
-                    if (searchimageArray.includes(image)) continue
-                    pass++
-                    searchimageArray.push(image)
-                    const groupId = result.data.Get.Image[0].groupid
-    
-                    if (!generalGroupId[groupId]) {
-                        generalGroupId[groupId] = {count: 1, data:[{image: image, uuid:  result.data.Get.Image[0]._additional.id, groupid: groupId}]}
-                    } else {
-                        generalGroupId[groupId].count = generalGroupId[groupId].count + 1
-                        generalGroupId[groupId].data.push({image: image, uuid:  result.data.Get.Image[0]._additional.id, groupid: groupId})
-                    }
-                    
-                }
-
-                if (pass) functionArray.splice(index, 1)
-            }
-        }
-
-
+        const {generalGroupId, functionArray, breakFromLoop} = await processMessageQueue(queue.messages, chatIdtrue, groupId, queuArrayLenght, localeplatform, queue.context)
 
         if (functionArray.length>0) await Promise.all(functionArray.map(func => func()));
-        
         console.log(generalGroupId)
-        console.log('тут')
-        const imageArray: string[]  = [];
         
-        if (breakFromLoop || Object.keys(generalGroupId).length === 1) {
-            console.log('попал в залупу повторяющуюся')
-            let shouldBreakFromLoop = false
-            const procceedKey = Number(Object.keys(generalGroupId)[0])
-            // const procceedKey = Number(Object.entries(generalGroupId).reduce<[string, { count: number; data: any[] }]>((acc, curr) => {
-            //     // Ensure TypeScript understands the structure of acc and curr correctly:
-            //     // acc is an array where acc[0] is a number (the key) and acc[1] is an object { count: number; data: any[] }
-            //     // curr follows the same structure
-            //     return curr[1].count > acc[1].count ? curr : acc;
-            // }, ["0", { count: -Infinity, data: [] }])[0]); // Provide an initial value that matches the expected structure
-            console.log(`${procceedKey} - уникальный ключ для группы`)
-            let uuid: string = generalGroupId[procceedKey].data[0].uuid
-            // let uuid: string = needToProcess[0].data[0].uuid
+        
+        // if (breakFromLoop || Object.keys(generalGroupId).length === 1) {
+        //     const procceedKey = Number(Object.keys(generalGroupId)[0])
+        //     const allGroupPhoto = generalGroupId[procceedKey].data
+        //     const photosLenght = allGroupPhoto.length
+        //     const uuid = allGroupPhoto[0].uuid
+
+        //     let files: (InputMediaPhoto|IUploadSourceMedia)[] = []
+        //     let indexies: number[] = []
+
+        //     const extendedMessage = await findByUuid(uuid!, chatIdtrue) as message
+        //     extendedMessage.tgchatid = queue.tgchatid
+        //     const addToText = await updateOrCreateBayanForChat(chatIdtrue, userid.toString(), username, photosLenght)
+        //     const belongToPlatform: boolean = (allGroupPhoto[0].platform === localeplatform) ? true : false
+        //     const platformForDate = allGroupPhoto[0].platform
+        //     const date = platform[platformForDate].geFormatedDate(extendedMessage.message)
+        //     const indstr = platform[localeplatform].makeText(allGroupPhoto, date, indexies)
+        //     // console.log(`indexies is ${indexies}`)
+
+        //     const erroruuid = await insertWithChatIdAndCount(allGroupPhoto[0].msg, chatIdtrue, photosLenght, userid, localeplatform)
+
+        //     for (let i=0; i<photosLenght-1; i++) {{
+        //         await platform[localeplatform].photoupload(files, allGroupPhoto[i].image)
+        //     }}
+        //     const text = platform[localeplatform].makeTextSecond(indexies.join(''), indstr, erroruuid, addToText)
+        //     await platform[localeplatform].lastUploadPhoto(files, allGroupPhoto[photosLenght-1].image, text)
+
+        //     return await platform[localeplatform].replyWithPlatform({context: queue.context, files: files, extendedMessage: extendedMessage, text: text as string, belongToPlatform})
+        // }
 
 
-            console.log('пока что перед полученим файлов')
-            for (const [index, value] of Object.entries(generalGroupId)) {
-                if (shouldBreakFromLoop) break
-                const photosLenght = value.data.length
-                console.log(`длина массива сейчас такая - ${photosLenght}`)
-                for (let i=0; i<photosLenght; i++) {
-                    if (value.data[i].groupid !== procceedKey) continue
-                    // if (imageArray.includes(value.data[i].images)) continue
-                    imageArray.push(value.data[i].image)
-                    if (imageArray.length === queuArrayLenght) {
-                        uuid = value.data[i].uuid
-                        shouldBreakFromLoop = true
-                        break
-                    }
-                }
-            }
-
-            console.log(uuid)
-            console.log('уже после получения файлов')
-            // console.log(imageArray)
-            let files: InputMediaPhoto[] = []
-            const imgLenght = imageArray.length-1
-            for (let i=0; i<imgLenght; i++) {{
-                // console.log(imageArray[i].substring(0, 40))
-                const data = await tg.uploadFile({
-                    file: Buffer.from(imageArray[i], 'base64'),
-                    fileName: 'some.jpg'
-                })
-                files.push(InputMedia.photo(data))
-            }}
-
-            console.log(`длина files ${files.length}`)
-
-            const extendedMessage = await findByUuid(uuid!, chatId) as message
-            const humanReadable = getHumanReadableTime(extendedMessage.message.date)
-            const addToText = await updateOrCreateBayanForChat(chatId, queue.messages[0].sender.id.toString(), username, imgLenght+1)
-
-            console.log('и после формирования фоток')
-           
-            const data = await tg.uploadFile({
-                file: Buffer.from(imageArray[imgLenght], 'base64'),
-                fileName: 'some.jpg'
-            })
-
-            const erroruuid = await insertWithChatIdAndCount(chatId, imgLenght+1, userid)
-            files.push(InputMedia.photo(data, {caption:  html`Если нет ни одной схожей фотки, то пропиши <br><code>/err ${erroruuid}</code> <br><br>Сообщение от @${username}<br>от ${humanReadable}<br><br>${html(addToText)}`}))
-
-            console.log('уже тут')
-            return  await tg.replyMediaGroup(extendedMessage.message, files); 
+        let imageUUID: string[] = []
+        let generalIndex: number[] = []
+        if (generalGroupId['0']?.data.length>1) {
+            const newData = generalGroupId['0'].data;
+            delete generalGroupId['0']; // Remove or transform this as needed
+            
+            newData.forEach((variant, index) => {
+                generalGroupId[index + 1] = { count: 1, data: [variant] };
+            });
         }
-
-
-
-
-        // let messageToAnswer: {files: InputMediaPhoto[], extendedMessage: message }[] = []
-
+        console.log(`длина ${Object.entries(generalGroupId).length}`)
+        // console.log(generalGroupId)
 
         for (const [index, value] of Object.entries(generalGroupId)) {
             const photosLenght = value.data.length
-
-            let InputMediaPhoto: InputMediaPhoto[] = [];
-            // let uuidArray: string[] = []
-            
-            const extendedMessage = findByUuid(value.data[0].uuid, chatId) as Promise<message>
             const count = (queuArrayLenght === 1) ? 1 : photosLenght
-            const erroruuid = await insertWithChatIdAndCount(chatId, count, userid)
+            const platformForDate = value.data[0].platform
+            const belongToPlatform: boolean = (value.data[0].platform === localeplatform) ? true : false
+            // console.log(`длина текущей ${photosLenght}`)
 
-            for (let i=0; i<photosLenght; i++) {
-                const b64 = value.data[i].image
-                
-                if (imageArray.includes(b64)) continue
-                imageArray.push(b64)
-                const groupid = value.data[i].groupid
+            let pass = false 
+            let files: (InputMediaPhoto|IUploadSourceMedia)[] = []
+            let uniqueInds = new Set(value.data.map(val => val.ind));
+            // let indexies = Array.from(uniqueInds);
+            let indexies: number[] = []
             
-                const data = await tg.uploadFile({
-                    file: Buffer.from(b64, 'base64'),
-                    fileName: 'some.jpg'
-                })
+            const extendedMessage = await findByUuid(value.data[0].uuid, chatIdtrue) as message
+            extendedMessage.tgchatid = queue.tgchatid;
+            
+            const date = platform[platformForDate].geFormatedDate(extendedMessage.message);
+            const indstr = platform[localeplatform].makeText(value.data, date, indexies)
 
-                const uuid = value.data[i].uuid
-                
-                // if (generalGroupId.has(groupid)) {
-                //     let entry = generalGroupId.get(groupid)!
-                //     entry.uplFile.push(data)
-                //     entry.uuidArray.push(uuid)
-                //     entry.message.push(message)
-                // } else {
-                //     generalGroupId.set(groupid, {uplFile: [data], uuidArray: [uuid], message: [message as Promise<message>]})
-                // }
-                console.log('файлинпут готов')
-                let file: InputMediaPhoto
-                if (i !== photosLenght-1) {
-                    file = InputMedia.photo(data)
-                } else {
-                    const humanReadable = getHumanReadableTime((await extendedMessage).message.date)
-                    console.log(`длина баянов ${photosLenght}`)
-                    const addToText = await updateOrCreateBayanForChat(chatId, queue.messages[0].sender.id.toString(), username, count)
-                    file = InputMedia.photo(data, {caption: html`Если нет ни одной схожей фотки, то пропиши <br><code>/err ${erroruuid}</code> <br><br>Сообщение от @${username}<br>от ${humanReadable}<br><br>${html(addToText)}`})
+            indexies.map((el: number) => {
+                if (!generalIndex.includes(el)) {
+                    pass = true
+                    generalIndex.push(el)
                 }
-                
-                InputMediaPhoto.push(file)
-                // uuidArray.push(uuid)
-            }
+            })
 
-            console.log('InputMediaPhoto готов')
-            // messageToAnswer.push({files: InputMediaPhoto, extendedMessage: await extendedMessage as message})
-            tg.replyMediaGroup((await extendedMessage).message, InputMediaPhoto);   
+            const erroruuid = (pass) ?  await insertWithChatIdAndCount(value.data[0].msg, chatIdtrue, count, userid, localeplatform) : ''
+            // const [result] = await tg.getMessages(chatId, [extendedMessage.message.id]) // check if message exists
+            const addToText = await updateOrCreateBayanForChat(chatIdtrue, userid.toString(), username, count, pass)
+            const text = platform[localeplatform].makeTextSecond(indexies.join(''), indstr, erroruuid, addToText, pass)
+            await platform[localeplatform].lastUploadPhoto(files, value.data[0].image, text)
+
+            for (let i=1; i<photosLenght; i++) {
+                const b64 = value.data[i].image
+                if (imageUUID.includes(value.data[i].uuid)) continue
+                imageUUID.push(value.data[i].uuid)
+                // indexies.push(value.data[i].ind)
+            
+                await platform[localeplatform].photoupload(files, value.data[i].image)
+            }
+ 
+            await platform[localeplatform].replyWithPlatform({context: queue.context, files: files, extendedMessage: (await extendedMessage), text: text as string, belongToPlatform})
         }
         
-        // for (let [index, value] of messageToAnswer.entries()) {
-        //     await tg.replyMediaGroup(value.extendedMessage.message, value.files); 
-        // }
-        // console.log(needToProcess)
-
-        delete this.queues[chatId];
     }
 
 
 
 
-  addMessage(message: Message) {
-    const groupId = message.groupedId?.low ? message.groupedId.low  : 0;
-    console.log(groupId)
 
-    const chatId = message.chat.id
 
-    if (!this.queues[chatId]) {
-      this.queues[chatId] = {};
-    }
+    async addTGMessage(message: Message) {
+        const chatId = message.chat.id
+        const groupId = message.groupedId?.low ? message.groupedId.low : 0;
 
-    if (!this.queues[chatId][groupId]) {
-      this.queues[chatId][groupId] = { messages: [], timer: undefined };
-    }
-    
-    // Add the new message to the queue
-    this.queues[chatId][groupId].messages.push(message);
-
-    // Setup a timer for this groupId within chatId if it's not already set
-    if (!this.queues[chatId][groupId].timer) {
-      this.queues[chatId][groupId].timer = setTimeout(() => {
-        //@ts-ignore
-        this.processQueue(chatId, groupId);
-        if (this.queues[chatId] && this.queues[chatId][groupId]) {
-          delete this.queues[chatId][groupId].timer;
+        if (!this.queues[chatId]) {
+            this.queues[chatId] = {};
         }
-      }, 1000); // Adjust the delay as needed
-    } 
-  }
+
+        if (!this.queues[chatId][groupId]) {
+            this.queues[chatId][groupId] = { messages: [], timer: undefined, username: '', userid: 0, platform: 'TG', chatIdtrue: undefined };
+        }
+        
+        this.queues[chatId][groupId].messages.push(message);
+
+        if (groupId === 0) {
+            const settingPromise = await getChatIdByPlatformId({ 
+                tgchatid: chatId, 
+                username: message.sender.username ?? message.sender.id.toString(),
+                userId: message.sender.id
+            });
+            this.queues[chatId][groupId].username = 
+                settingPromise.username?.[message.sender.id] ??  // Tries to get the username from settingsInfo using sender's ID
+                message.sender.username ??  // Falls back to sender's username from the message
+                (this.queues[chatId][groupId].messages[0] as Message).sender.id.toString();  // Uses the sender ID from the first message in the queue as the last resort
+        
+            this.queues[chatId][groupId].userid = message.sender.id
+            this.queues[chatId][groupId].chatIdtrue = Number(settingPromise.chatid)
+            this.queues[chatId][groupId].tgchatid = Number(settingPromise.tgchatid!)
+
+
+            return this.processQueue(chatId, groupId);
+        }
+
+        if (!this.queues[chatId][groupId].timer) {
+            const settingPromise = getChatIdByPlatformId({ 
+                tgchatid: chatId, 
+                username: message.sender.username ??  message.sender.id.toString(),
+                userId: message.sender.id 
+            });
+        
+            this.queues[chatId][groupId].timer = setTimeout(async () => {
+                const settings = await settingPromise;
+                this.queues[chatId][groupId].username = `@${(this.queues[chatId][groupId].messages[0] as Message).sender.username}` ?? (this.queues[chatId][groupId].messages[0] as Message).sender.id.toString();
+                this.queues[chatId][groupId].userid = (this.queues[chatId][groupId].messages[0] as Message).sender.id;
+                this.queues[chatId][groupId].tgchatid = Number(settings.tgchatid!)
+                // console.log(`userid is ${this.queues[chatId][groupId].userid}`);
+                
+                const chatIdtrue = settings.chatid;
+                this.queues[chatId][groupId].chatIdtrue = Number(chatIdtrue);
+        
+                await this.processQueue(chatId, groupId); // Adjust to ensure proper asynchronous execution
+        
+                if (this.queues[chatId] && this.queues[chatId][groupId]) {
+                    delete this.queues[chatId][groupId].timer;
+                }
+            }, 1000); // Adjust the delay as needed
+        }
+    }
+
+
+    async addVKMessage(context: MessageContext<ContextDefaultState> & object) {
+        let photos = context.getAttachments('photo')
+        if (photos.length === 0) {
+            console.log('да ноль штук')
+            // console.log(context.attachments)
+            // console.log(context.attachments.constructor.name);
+            context.attachments.forEach((el) => {
+                if (el instanceof WallAttachment) {
+                    console.log('да альбом с группы')
+                    photos = el.attachments.map((el) => {
+                        if (el instanceof PhotoAttachment) return el
+                    }) as PhotoAttachment[]
+                }
+            })
+      
+            
+        }
+
+        // console.log(`сейчас длина фото - ${photos.length}`)
+        const chatId = context.peerId
+
+        const settingPromise = await getChatIdByPlatformId(
+            { 
+                vkchatid: chatId,
+                userId: context.senderId,
+                username: context.senderId.toString()
+            });
+
+        
+        const groupId = (photos.length>1) ? generateRandomDigits(9) : 0;
+        let userId = (settingPromise.username) ? Number(settingPromise.username[context.senderId]) : context.senderId
+        if (!userId ) userId = context.senderId
+
+        this.queues[chatId] = {};
+        
+        if (!this.queues[chatId][groupId]) {
+            this.queues[chatId][groupId] = 
+            {
+                messages: [], 
+                timer: undefined, 
+                username: settingPromise.username ? settingPromise.username[userId] : `${context.senderId}`, 
+                userid: Number(userId),
+                platform: 'VK',
+                chatIdtrue: Number(settingPromise.chatid),
+                context: context,
+                tgchatid: Number(settingPromise.tgchatid!)
+            };
+        }
+
+        let b64photos: string[] = []
+        for (let photo of photos) {
+            this.queues[chatId][groupId].messages.push(photo);
+        }
+        // this.queues[chatId][groupId].messages.push(context);
+        // console.log(settingPromise)
+        
+        await this.processQueue(chatId, groupId);
+        if (settingPromise.should_create && !settingPromise.tgchatid) {
+            await context.reply('Ты еще не привязал телеграм аккаунт. Чтобы установить связь, пропиши команду\n\n/set @nickname\n\nЧтобы больше не получать подобные уведомления, пропиши\n/set off')
+        }
+    }
 
 }
 

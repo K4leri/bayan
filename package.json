@@ -14,13 +14,15 @@
         "dev": "tsx watch src/index.ts"
     },
     "dependencies": {
+        "@mtcute/core": "^0.10.1",
         "@mtcute/crypto-node": "^0.10.0",
         "@mtcute/dispatcher": "^0.10.0",
-        "@mtcute/html-parser": "^0.10.0",
+        "@mtcute/html-parser": "^0.10.1",
         "@mtcute/node": "^0.10.0",
         "@types/pg": "^8.11.4",
         "dotenv": "^16.4.5",
         "pg": "^8.11.5",
+        "vk-io": "^4.9.1",
         "weaviate-ts-client": "^2.1.1"
     },
     "devDependencies": {

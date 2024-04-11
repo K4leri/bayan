@@ -1,29 +1,32 @@
 import pg, { DatabaseError } from 'pg';
-import { ErrorRecord, UserStat, message } from '../types/sometypes.js';
+import { ErrorEntry, Settings, UserStat, message } from '../types/sometypes.js';
 import { UUID } from 'crypto';
+import { Message, User } from '@mtcute/node';
+import { Attachment, ContextDefaultState, ExternalAttachment, MessageContext } from 'vk-io';
+import { generateRandomDigits } from '../bayan/sometodo.js';
 const { Pool } = pg;
 
 
 const pool = new Pool({
     user: 'postgres',
-    // host: 'localhost',        //for local enveriment from my local pc
-    host: 'tgbot-postgresql-1', // for docker to docker
+    host: 'localhost',        //for local enveriment from my local pc
+    // host: 'tgbot-postgresql-1', // for docker to docker
     database: 'tgclient',
     password: '51kln00bfd54FTY',
     port: 5432,
 });
 
 
-export async function insertIntoPostgres(uuid: string, message: any, groupid: number | null, chatid: number) {
+export async function insertIntoPostgres(uuid: string, message: any, groupid: number | null, chatid: number, platform: string) {
   
   
   const query = `
-    INSERT INTO message(uuid, message, groupid, chatid)
-    VALUES($1, $2, $3, $4)
+    INSERT INTO message(uuid, message, groupid, chatid, platform)
+    VALUES($1, $2, $3, $4, $5)
   `
 
   try {
-    await pool.query(query, [uuid, message, groupid, chatid]);
+    await pool.query(query, [uuid, message, groupid, chatid, platform]);
   } catch (err) {
     console.error('Error inserting into PostgreSQL:', err);
     return null; // It's helpful to explicitly return null or some error indicator in case of failure
@@ -135,13 +138,18 @@ export async function updateBayanByChatId(chatid: number, newBayanData: { [userI
 }
 
 
-export async function insertWithChatIdAndCount(chatid: number, count: number, userid: number): Promise<UUID> {
+export async function insertWithChatIdAndCount(
+  message: Message | (Attachment<object, string> | ExternalAttachment<object, string>), 
+  chatid: number, 
+  count: number, 
+  userid: number,
+  platform: string
+): Promise<UUID> {
+  
   try {
-   
-    const queryText = 'INSERT INTO errors (chatid, count, userid) VALUES ($1, $2, $3) RETURNING id;';
-    const res = await pool.query(queryText, [chatid, count, userid]);
-
-    return res.rows[0].id;
+    const queryText = 'INSERT INTO errors (message, chatid, count, userid, platform) VALUES ($1, $2, $3, $4, $5) RETURNING key;';
+    const res = await pool.query<ErrorEntry>(queryText, [message, chatid, count, userid, platform]);
+    return res.rows[0].key as UUID;
   } catch (err) {
     console.error('Error executing insertWithChatIdAndCount:', err);
     throw err; // Rethrow the error for further handling, if necessary
@@ -149,10 +157,16 @@ export async function insertWithChatIdAndCount(chatid: number, count: number, us
 }
 
 
-export async function selectById(id: UUID): Promise<{ chatid: number; count: number }> {
+export async function selectById(id: UUID): 
+Promise<{ chatid: number; 
+  count: number, 
+  message: Message | MessageContext<ContextDefaultState> & object, 
+  platform: string }> {
   try {
-    const queryText = 'SELECT chatid, count FROM errors WHERE id = $1;';
+    const queryText = 'SELECT chatid, count, message, platform FROM errors WHERE key = $1;';
     const res = await pool.query(queryText, [id]);
+    // console.log('======================== репорт ошибки тут ========================')
+    // console.log(res.rows[0])
     return res.rows[0]; // Return the first row (assuming id is unique)
   } catch (err) {
     console.error('Error executing selectById:', err);
@@ -162,7 +176,7 @@ export async function selectById(id: UUID): Promise<{ chatid: number; count: num
 
 export async function deleteById(id: UUID): Promise<void> {
   try {
-    const queryText = 'DELETE from errors WHERE id = $1;';
+    const queryText = 'DELETE from errors WHERE key = $1;';
     await pool.query(queryText, [id]);
   } catch (err) {
     console.error('Error executing selectById:', err);
@@ -172,10 +186,229 @@ export async function deleteById(id: UUID): Promise<void> {
 
 export async function updateById(id: UUID, count: number): Promise<void> {
   try {
-    const queryText = 'UPDATE errors SET count = $1 WHERE id = $2;';
-    await pool.query<ErrorRecord>(queryText, [count, id]);
+    console.log(`новый каунт ${count}`)
+    const queryText = 'UPDATE errors SET count = $1 WHERE key = $2;';
+    await pool.query<ErrorEntry>(queryText, [count, id]);
   } catch (err) {
     console.error('Error executing selectById:', err);
     throw err; // Rethrow the error for further handling, if necessary
   }
+}
+
+type UsernamesById = {
+  [key: number]: string;
+};
+
+export async function insertSettings(tgchatid: null|number = null, chatid: number, username: UsernamesById, vkchatid: null|number  = null) {
+  const insertQuery = `
+    INSERT INTO settings (tgchatid, chatid, username, vkchatid)
+    VALUES ($1, $2, $3::jsonb, $4)
+    RETURNING chatid, username, should_create;
+  `;
+
+  const {rows} = await pool.query<Settings>(insertQuery, [tgchatid, chatid, username, vkchatid]);
+  return rows[0];
+}
+
+interface QueryResult {
+  count: number; // Assuming count is always returned as an integer
+  bayan: {
+    [userId: string]: { // The user ID as a string maps to an object containing both count and nickname
+      count: number;
+      nickname: string;
+    };
+  };
+}
+interface BayanEntry {
+  count: number;
+  nickname: string;
+}
+
+// Assuming the structure of the rows returned by your query
+interface QueryResultRow {
+  bayan: Record<string, BayanEntry>;
+}
+export async function updateSettings(chatid: number, username: UsernamesById, vkchatid: number, nickname: string, tgchatid: number) {
+  
+  await pool.query('BEGIN');
+
+
+  const insertQuery = `
+      UPDATE settings
+      SET username = $1, vkchatid = $2
+      WHERE chatid = $3
+  `;
+  try {
+    await pool.query<Settings>(insertQuery, [username, vkchatid, chatid]);
+
+
+    const selectQuery = `
+      SELECT * from settings
+      WHERE vkchatid = $1 and tgchatid IS NULL
+    `
+    const {rows} = await pool.query<Settings>(selectQuery, [vkchatid])
+
+    const query = `
+      DELETE from settings
+      WHERE vkchatid = $1 and tgchatid IS NULL
+    `;
+    await pool.query<Settings>(query, [vkchatid])
+
+    const selectUserStatQuery = `
+    SELECT
+      bayan->(SELECT jsonb_object_keys(bayan) FROM userstat WHERE chatid = $1 LIMIT 1)->>'count' AS count,
+      chatid
+    FROM
+      userstat
+    WHERE
+      chatid = $1;
+    `;
+
+    const result = await pool.query(selectUserStatQuery, [rows[0].chatid]);
+  
+    if (result.rows.length > 0) {
+      console.log('обновляю')
+      console.log(result.rows[0])
+      const count = Number(result.rows[0].count)
+      console.log(`count is ${count}`)
+      const tgchatidStr = tgchatid.toString();
+
+      const currentBayanQuery = `
+        WITH key_value_pairs AS (
+          SELECT
+            kv.key,
+            kv.value,
+            userstat.bayan as bayan,
+            kv.value->>'nickname' AS extracted_nickname
+          FROM 
+            userstat,
+            jsonb_each(userstat.bayan) AS kv(key, value)
+          WHERE chatid = $1
+        )
+        SELECT bayan
+        FROM key_value_pairs
+        WHERE extracted_nickname = $2;
+      `;
+
+      const currentResult = await pool.query<QueryResult>(currentBayanQuery, [chatid, nickname]);
+
+      console.log(currentResult.rows)
+      if (currentResult.rows.length > 0) {
+        const rows = currentResult.rows as QueryResultRow[];
+        console.log(rows)
+        let bayanToUpdate: Record<string, BayanEntry>;
+        let keyToUpdate: string = '';
+
+        rows.forEach(row => {
+          console.log('++++')
+          console.log(row)
+          Object.entries(row.bayan).forEach(([key, entry]) => {
+            if (entry.nickname === nickname) {
+              bayanToUpdate = row.bayan;
+              keyToUpdate = key;
+            }
+          });
+        });
+        
+        const oldCount = bayanToUpdate![keyToUpdate!].count
+        bayanToUpdate![keyToUpdate!].count =  oldCount + count;
+
+        const updateBayanQuery = `
+          UPDATE userstat
+          SET bayan = $1
+          WHERE chatid = ${chatid};
+        `;
+
+        console.log('перед обновлением')
+        console.log(rows[0].bayan)
+        await pool.query(updateBayanQuery, [rows[0].bayan]);
+
+        const deleteQuery = `
+          DELETE FROM userstat
+          WHERE chatid = $1
+        `
+        
+        await pool.query(deleteQuery, [result.rows[0].chatid]);
+      }
+
+    }
+
+    await pool.query('COMMIT');
+
+  } catch (e) {
+    console.log(e)
+    await pool.query('COMMIT');
+  }
+ 
+}
+
+interface ChatIdParams {
+  tgchatid?: number | null;
+  vkchatid?: number | null;
+  username?: string;
+  userId: number;
+}
+
+export async function getUsernameJSON(nickname: string) {
+  const updateQuery = `
+    SELECT s.*
+    FROM settings s, jsonb_each_text(s.username) AS kv
+    WHERE kv.value = $1 AND s.vkchatid IS NULL;
+  `;
+  console.log(nickname)
+  const {rows} = await pool.query<Settings>(updateQuery, [nickname]);
+  return rows[0];
+}
+
+export async function getChatIdByPlatformId({ tgchatid = null, vkchatid = null, userId, username }: ChatIdParams) {
+  const selectQuery = `SELECT chatid, username, should_create, vkchatid, tgchatid FROM settings WHERE tgchatid = $1 OR vkchatid = $2;`;
+  const { rows } = await pool.query<Settings>(selectQuery, [tgchatid, vkchatid]);
+  
+  // if (!rows[0]?.username)  throw new Error('Forget setting username')
+  const data = (tgchatid) ? tgchatid : vkchatid!
+  if (!rows[0]?.chatid) {
+    const random = generateRandomDigits(12)
+    return await insertSettings(tgchatid, random, {[userId as number]: `@${username}`}, vkchatid)
+  }
+
+  const usernames = rows[0].username
+
+  if (tgchatid && usernames && !usernames[userId]) {
+    usernames[tgchatid] = `@${username}`
+    rows[0].username = usernames
+    console.log('creating new')
+    console.log(rows[0].username)
+    await updateSettingsWithUsername(data, rows[0].username)
+  }
+
+  // console.log('i am getting back new')
+  return rows[0]
+}
+
+
+export async function updateSettingsNotification(vkchatid: number) {
+  const updateQuery = `
+      UPDATE settings
+      SET should_create = False
+      WHERE vkchatid = $1;
+  `;
+  await pool.query<Settings>(updateQuery, [vkchatid]);
+}
+
+export async function updateSettingsWithUsername(tgchatid: number, username: UsernamesById) {
+  const updateQuery = `
+      UPDATE settings
+      SET username = $1
+      WHERE tgchatid = $2;
+  `;
+  await pool.query<Settings>(updateQuery, [username, tgchatid]);
+}
+
+export async function updateSettingsWithVKChatId(tgchatid: number, vkchatid: number) {
+  const updateQuery = `
+      UPDATE settings
+      SET vkchatid = $2
+      WHERE tgchatid = $1;
+  `;
+  await pool.query(updateQuery, [tgchatid, vkchatid]);
 }
