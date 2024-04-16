@@ -1,9 +1,11 @@
 import { platform } from "os";
 import { insertIntoPostgres } from "./db.js";
 import { client } from "./weaviatePerStart.js";
+import { bot, botdp } from "./tgclient.js";
+import { InputMedia, Photo } from "@mtcute/core";
 
 
-export async function createImageAndInsertIntoPostgres(b64Image: string, message: any, groupId: number, platform: string, chatIdtrue: number) {
+export async function createImageAndInsertIntoPostgres(b64Image: string, message: number, groupId: number, platform: string, chatIdtrue: number) {
     try {
         const creationResult = await client.data.creator()
             .withClassName('Image')
@@ -22,8 +24,12 @@ export async function createImageAndInsertIntoPostgres(b64Image: string, message
             return;
         }
 
+        const buffer = Buffer.from(b64Image, 'base64');
+        const photo = InputMedia.photo(buffer, { fileName: 'image.png' })
+        const data = await bot.uploadMedia(photo) as Photo
+
         // Assuming 'insertIntoPostgres' is a function you've defined to insert the data into PostgreSQL
-        await insertIntoPostgres(uuid, message, groupId, chatIdtrue, platform);
+        await insertIntoPostgres(uuid, message, groupId, chatIdtrue, platform, data.fileId);
 
         console.log(`${chatIdtrue} - Insertion successful`);
 

@@ -5,11 +5,11 @@ CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 CREATE TABLE message (
     id SERIAL PRIMARY KEY,
     uuid UUID NOT NULL UNIQUE,
-    message JSONB,
+    message BIGINT,
     chatid BIGINT NOT NULL,
     groupid BIGINT,
     platform TEXT,
-    firstmessageid BIGINT,
+    fileid TEXT,
     time_creation TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 

@@ -1,8 +1,8 @@
 import pg, { DatabaseError } from 'pg';
-import { ErrorEntry, Settings, UserStat, message } from '../types/sometypes.js';
+import { ErrorEntry, Settings, SomeErrors, UserStat, fileIdObject, message } from '../types/sometypes.js';
 import { UUID } from 'crypto';
 import { Message, User } from '@mtcute/node';
-import { Attachment, ContextDefaultState, ExternalAttachment, MessageContext } from 'vk-io';
+import { Attachment, ContextDefaultState, ExternalAttachment, MessageContext, PhotoAttachment } from 'vk-io';
 import { generateRandomDigits } from '../bayan/sometodo.js';
 const { Pool } = pg;
 
@@ -17,16 +17,16 @@ const pool = new Pool({
 });
 
 
-export async function insertIntoPostgres(uuid: string, message: any, groupid: number | null, chatid: number, platform: string) {
+export async function insertIntoPostgres(uuid: string, message: any, groupid: number | null, chatid: number, platform: string, fileid: string) {
   
   
   const query = `
-    INSERT INTO message(uuid, message, groupid, chatid, platform)
-    VALUES($1, $2, $3, $4, $5)
+    INSERT INTO message(uuid, message, groupid, chatid, platform, fileid)
+    VALUES($1, $2, $3, $4, $5, $6)
   `
 
   try {
-    await pool.query(query, [uuid, message, groupid, chatid, platform]);
+    await pool.query(query, [uuid, message, groupid, chatid, platform, fileid]);
   } catch (err) {
     console.error('Error inserting into PostgreSQL:', err);
     return null; // It's helpful to explicitly return null or some error indicator in case of failure
@@ -46,6 +46,18 @@ export async function findByUuid(uuid: string, chatid: number): Promise<message|
     } catch (err) {
       console.error('Error querying PostgreSQL:', err);
     }
+}
+
+export async function findByUuidAndSelectOnlyFileId(uuid: string, chatid: number): Promise<fileIdObject[]> {
+    const query = `
+      SELECT fileid FROM message
+      WHERE uuid = $1 and chatid = $2;
+    `;
+
+    
+    const res = await pool.query<fileIdObject>(query, [uuid, chatid]).catch(err => {throw new Error('жизнь сложная')}) ;
+    return res.rows
+    
 }
 
 export async function getMessagesByUUIDs(uuidArray: string[], chatid: number): Promise<message[]|undefined> {
@@ -140,16 +152,24 @@ export async function updateBayanByChatId(chatid: number, newBayanData: { [userI
 
 export async function insertWithChatIdAndCount(
   message: Message | (Attachment<object, string> | ExternalAttachment<object, string>), 
+  // message: number,
   chatid: number, 
   count: number, 
   userid: number,
-  platform: string
+  platform: string,
 ): Promise<UUID> {
   
   try {
     const queryText = 'INSERT INTO errors (message, chatid, count, userid, platform) VALUES ($1, $2, $3, $4, $5) RETURNING key;';
-    const res = await pool.query<ErrorEntry>(queryText, [message, chatid, count, userid, platform]);
-    return res.rows[0].key as UUID;
+    //@ts-ignore
+    if (platform === 'TG') {
+      const res = await pool.query<ErrorEntry>(queryText, [(message as Message).id, chatid, count, userid, platform]);
+      return res.rows[0].key as UUID;
+    } else {
+      const res = await pool.query<ErrorEntry>(queryText, [message as PhotoAttachment, chatid, count, userid, platform]);
+      return res.rows[0].key as UUID;
+    }
+
   } catch (err) {
     console.error('Error executing insertWithChatIdAndCount:', err);
     throw err; // Rethrow the error for further handling, if necessary
@@ -158,10 +178,7 @@ export async function insertWithChatIdAndCount(
 
 
 export async function selectById(id: UUID): 
-Promise<{ chatid: number; 
-  count: number, 
-  message: Message | MessageContext<ContextDefaultState> & object, 
-  platform: string }> {
+Promise<SomeErrors> {
   try {
     const queryText = 'SELECT chatid, count, message, platform FROM errors WHERE key = $1;';
     const res = await pool.query(queryText, [id]);

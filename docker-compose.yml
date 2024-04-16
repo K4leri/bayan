@@ -47,20 +47,20 @@ services:
     environment:
       ENABLE_CUDA: '0'
 
-  # tgbot:
-  #   build: .
-  #   environment:
-  #     NODE_ENV: production
-  #   volumes:
-  #     - .:/usr/src/app
-  #     - /usr/src/app/node_modules
-  #   restart: on-failure
-  #   ports:
-  #     - '3086:3086' # Adjust if your bot needs to expose any ports
-  #   depends_on:
-  #     - postgresql
-  #     - weaviate
-  #     - i2v-neural
+  tgbot:
+    build: .
+    environment:
+      NODE_ENV: production
+    volumes:
+      - .:/usr/src/app
+      - /usr/src/app/node_modules
+    restart: on-failure
+    ports:
+      - '3086:3086' # Adjust if your bot needs to expose any ports
+    depends_on:
+      - postgresql
+      - weaviate
+      - i2v-neural
 
 volumes:
   weaviate_data: {}

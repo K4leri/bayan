@@ -1,0 +1,35 @@
+2024-04-15T11:00:02.302Z [INF] [tcp] [USER 433894487] [DC 2] [UPLOAD] [SESSION -cfa62a2df938274] [UID 18] [TCP:149.154.167.222:443] connected
+2024-04-15T11:00:02.302Z [INF] [conn] [USER 433894487] [DC 2] [UPLOAD] [SESSION -cfa62a2df938274] [UID 18] auth keys are already available
+2024-04-15T11:00:02.303Z [INF] [tcp] [USER 433894487] [DC 2] [UPLOAD] [SESSION 62bef9cd77519547] [UID 19] [TCP:149.154.167.222:443] connected
+2024-04-15T11:00:02.303Z [INF] [conn] [USER 433894487] [DC 2] [UPLOAD] [SESSION 62bef9cd77519547] [UID 19] auth keys are already available
+[
+  {
+    type: 'photo',
+    file: { inputFile: [Object], size: 142505, mime: 'image/jpeg' }
+  }
+]
+2024-04-15T11:00:02.514Z [VRB] [storage] [USER 5695172280] select * from peers where id = 433894487.0
+2024-04-15T11:00:02.515Z [VRB] [conn] [USER 5695172280] [DC 2] [MAIN] [SESSION 7c701bef9a473944] [UID 17] >>> {"_":"messages.uploadMedia","peer":{"_":"inputPeerUser","userId":433894487,"accessHash":{"low":908037041,"high":1613731621,"unsigned":false}},"media":{"_":"inputMediaUploadedPhoto","file":{"_":"inputFile","id":{"low":-101574763,"high":1481512217,"unsigned":false},"parts":2,"name":"some.jpg","md5Checksum":""}}}
+2024-04-15T11:00:02.515Z [DBG] [session] [USER 5695172280] [DC 2] [MAIN] [SESSION 7c701bef9a473944] enqueued messages.uploadMedia for sending (msg_id = n/a)
+2024-04-15T11:00:02.515Z [DBG] [conn] [USER 5695172280] [DC 2] [MAIN] [SESSION 7c701bef9a473944] [UID 17] flushing send queue. queued rpc: 1
+2024-04-15T11:00:02.516Z [DBG] [conn] [USER 5695172280] [DC 2] [MAIN] [SESSION 7c701bef9a473944] [UID 17] messages.uploadMedia: msg_id assigned 7358046927873077276, seqno: 19
+2024-04-15T11:00:02.516Z [DBG] [conn] [USER 5695172280] [DC 2] [MAIN] [SESSION 7c701bef9a473944] [UID 17] sending 1 messages: size = 84b, acks = n/a, ping = false (msg_id = null), state_req = n/a (msg_id = null), resend = n/a (msg_id = null), cancels = n/a (msg_id = null), 
+salts_req = false (msg_id = null), rpc = [ 'messages.uploadMedia' ], container = false, root msg_id = 7358046927873077276
+2024-04-15T11:00:02.569Z [VRB] [conn] [USER 5695172280] [DC 2] [MAIN] [SESSION 7c701bef9a473944] [UID 17] <<< (messages.uploadMedia:7358046927873077276) {"_":"mt_rpc_error","errorCode":400,"errorMessage":"FILE_PART_0_MISSING"}
+2024-04-15T11:00:02.570Z [DBG] [conn] [USER 5695172280] [DC 2] [MAIN] [SESSION 7c701bef9a473944] [UID 17] received rpc_error [400:FILE_PART_0_MISSING] for 7358046927873077276 (messages.uploadMedia)
+2024-04-15T11:00:02.570Z [DBG] [conn] [USER 5695172280] [DC 2] [MAIN] [SESSION 7c701bef9a473944] [UID 17] received ack for rpc query 7358046927873077276 (messages.uploadMedia, acked before = undefined)
+RpcError (400 FILE_PART_0_MISSING): File part 0 missing
+    at messages.uploadMedia
+    at BaseTelegramClient.call (file:///K:/Projects/Telegram%20Bots/node/userBots/pictureCaptioning/tgbot/node_modules/@mtcute/core/esm/highlevel/base.js:128:35)
+    at uploadMediaIfNeeded (file:///K:/Projects/Telegram%20Bots/node/userBots/pictureCaptioning/tgbot/node_modules/@mtcute/core/esm/highlevel/methods/files/normalize-input-media.js:216:34)
+    at _normalizeInputMedia (file:///K:/Projects/Telegram%20Bots/node/userBots/pictureCaptioning/tgbot/node_modules/@mtcute/core/esm/highlevel/methods/files/normalize-input-media.js:299:16)
+    at sendMediaGroup (file:///K:/Projects/Telegram%20Bots/node/userBots/pictureCaptioning/tgbot/node_modules/@mtcute/core/esm/highlevel/methods/messages/send-media-group.js:33:34)
+    at process.processTicksAndRejections (node:internal/process/task_queues:95:5)
+    at async ChatMessageProcessor.addVKMessage (file:///K:/Projects/Telegram%20Bots/node/userBots/pictureCaptioning/tgbot/src/bayan/queueMain.ts:1:6247)
+    at async file:///K:/Projects/Telegram%20Bots/node/userBots/pictureCaptioning/tgbot/src/index.ts:1:1385
+    at async file:///K:/Projects/Telegram%20Bots/node/userBots/pictureCaptioning/tgbot/node_modules/middleware-io/lib/index.mjs:276:9 {
+  code: 400,
+  text: 'FILE_PART_0_MISSING'
+}
+2024-04-15T11:00:04.029Z [DBG] [conn] [USER 5695172280] [DC 2] [MAIN] [SESSION 7c701bef9a473944] [UID 17] flushing send queue. queued rpc: 0
+2024-04-15T11:00:04.030Z [DBG] [conn] [USER 5695172280] [DC 2] [MAIN] [SESSION 7c701bef9a473944] [UID 17] sending 1 messages: size = 36b, acks = [7358046929511666689], ping = false (msg_id = null), state_req = n/a (msg_id = null), resend = n/a (msg_id = null), cancels = n/a (msg_id = null), salts_req = false (msg_id = null), rpc = [], container = false, root msg_id = null

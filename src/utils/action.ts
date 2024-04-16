@@ -96,9 +96,9 @@ export async function processMessageQueue(
             console.log(`${index} - should be processed`);
             if (uploadb64.includes(b64)) continue
             if (platform === 'TG'){
-                functionArray.push(() => createImageAndInsertIntoPostgres(b64, message, groupId, platform, chatId));
+                functionArray.push(() => createImageAndInsertIntoPostgres(b64, (message as Message).id, groupId, platform, chatId));
             } else {
-                functionArray.push(() => createImageAndInsertIntoPostgres(b64, context, groupId, platform, chatId));
+                functionArray.push(() => createImageAndInsertIntoPostgres(b64, context!.id, groupId, platform, chatId));
             }
         }
     }
@@ -177,7 +177,7 @@ async function vkuploadPhoto(files: IUploadSourceMedia[], b64: string) {
     files.push({value: Buffer.from(b64, 'base64')})
 }
 
-function formatDateToReadable(date: string | number, shouldRework: boolean = false): string {
+export function formatDateToReadable(date: Date, shouldRework: boolean = false): string {
     const options: Intl.DateTimeFormatOptions = {
         year: "numeric",
         month: "long",
@@ -187,8 +187,8 @@ function formatDateToReadable(date: string | number, shouldRework: boolean = fal
         hourCycle: 'h23' // Ensures 24-hour format is used
     };
 
-    const dateObj = (shouldRework) ? new Date(date as number*1000) : new Date(date);;
-    return new Intl.DateTimeFormat('ru-RU', options).format(dateObj);
+    // const dateObj = (shouldRework) ? new Date(date as number*1000) : new Date(date);;
+    return new Intl.DateTimeFormat('ru-RU', options).format(date);
 }
 
 function isMessage(message: any) {
@@ -198,20 +198,21 @@ function isPhotoAttachment(message: any): message is PhotoAttachment {
     return 'attachments' in message
 }
 
-function getDateFromMessage(message: any | Attachment<object, string> | ExternalAttachment<object, string>) {
-    if (isMessage(message)) {
-        return formatDateToReadable(message.date);
-    } else if (isPhotoAttachment(message)) {
-        return formatDateToReadable(message.createdAt!, true);
-    }
-    return "Date not available";
+function getDateFromMessage(date: Date) {
+    return formatDateToReadable(date);
+    // if (isMessage(message)) {
+    //     return formatDateToReadable(message.date);
+    // } else if (isPhotoAttachment(message)) {
+    //     return formatDateToReadable(message.createdAt!, true);
+    // }
+    // return "Date not available";
 }
 
 interface PlatformOperations {
     photoupload: (files: any[], b64: string) => Promise<void>;
     lastUploadPhoto: (files: any[], b64: string, text: any) => Promise<void>;
     replyWithPlatform: ({context, files, extendedMessage}: {files: any[], extendedMessage: message, context: (MessageContext<ContextDefaultState> & object) | undefined, text: string, belongToPlatform: boolean }) => Promise<void>;
-    geFormatedDate: (message: any | Attachment<object, string> | ExternalAttachment<object, string>) => string
+    // geFormatedDate: (Date: Date) => string
     makeText: (allGroupPhoto: GeneralGroupId[string]['data'], date: string, indexies: number[]) => string|TextWithEntities
     makeTextSecond: (indexies: string, indstr: TextWithEntities|string, erroruuid: string, addToText: string, pass: boolean) => string|TextWithEntities
 }
@@ -223,7 +224,7 @@ export const platform: Record<"VK" | "TG", PlatformOperations> = {
         replyWithPlatform: async ({context, files, extendedMessage, text, belongToPlatform}: {context: (MessageContext<ContextDefaultState> & object) | undefined, files: IUploadSourceMedia[], extendedMessage: message, text: string, belongToPlatform: boolean}) => {
             await context!.sendPhotos(files, {message: text})
         },
-        geFormatedDate: getDateFromMessage,
+        // geFormatedDate: getDateFromMessage,
         makeText: (allGroupPhoto: GeneralGroupId[string]['data'], date: string, indexies: number[]) => {
             return allGroupPhoto.map(element => {
                 if (!indexies.includes(element.ind + 1)) indexies.push(element.ind + 1);
@@ -246,14 +247,12 @@ export const platform: Record<"VK" | "TG", PlatformOperations> = {
         },
         replyWithPlatform: async ({context, files, extendedMessage, text, belongToPlatform}: {files: InputMediaPhoto[], extendedMessage: message, context: (MessageContext<ContextDefaultState> & object) | undefined, text: string, belongToPlatform: boolean }) => {
             if (belongToPlatform) {
-                await tg.replyMediaGroup(extendedMessage.message, files); 
+                await tg.sendMediaGroup(extendedMessage.tgchatid!, files, {replyTo: extendedMessage.message})
             } else {
-                // console.log(extendedMessage.tgchatid)
-                // console.log(typeof(extendedMessage.tgchatid))
                 await tg.sendMediaGroup(extendedMessage.tgchatid!, files); 
             }
         },
-        geFormatedDate: getDateFromMessage,
+        // geFormatedDate: getDateFromMessage,
         makeText: (allGroupPhoto: GeneralGroupId[string]['data'], date: string, indexies: number[]) => {
             return joinTextWithEntities(allGroupPhoto.map(element => {
                 if (!indexies.includes(element.ind + 1)) indexies.push(element.ind + 1);

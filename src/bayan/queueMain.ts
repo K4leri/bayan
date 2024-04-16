@@ -1,16 +1,13 @@
 import { InputMedia, InputMediaPhoto, Message } from "@mtcute/node";
 import { html } from "@mtcute/node";
-import { tg } from "../utils/tgclient.js";
+import { NotifBot, tg } from "../utils/tgclient.js";
 import { fetchDataByChatId, findByUuid, getChatIdByPlatformId, getMessagesByUUIDs, insertWithChatIdAndCount } from "../utils/db.js";
 import { GeneralGroupId, UserStat, message } from "../types/sometypes.js";
-import { generateRandomDigits, getHumanReadableTime, updateOrCreateBayanForChat } from "./sometodo.js";
+import { generateRandomDigits, updateOrCreateBayanForChat } from "./sometodo.js";
 import { createImageAndInsertIntoPostgres, searchImage } from "../utils/weaviate.js";
-import { getTelegramPhotoBase64, platform, processMessageQueue } from "../utils/action.js";
+import { formatDateToReadable, getTelegramPhotoBase64, getVKPhotoBase64, platform, processMessageQueue } from "../utils/action.js";
 import { Attachment, ContextDefaultState, ExternalAttachment, IUploadSourceMedia, MessageContext, PhotoAttachment, WallAttachment } from "vk-io";
-import { joinTextWithEntities } from "@mtcute/core/utils.js";
 import { vk } from "../utils/vkclient.js";
-import { replyText } from "@mtcute/core/methods.js";
-import { error } from "console";
 
 
 
@@ -147,9 +144,11 @@ class ChatMessageProcessor {
             let indexies: number[] = []
             
             const extendedMessage = await findByUuid(value.data[0].uuid, chatIdtrue) as message
+            if (!extendedMessage) continue
             extendedMessage.tgchatid = queue.tgchatid;
-            
-            const date = platform[platformForDate].geFormatedDate(extendedMessage.message);
+
+            // const date = platform[platformForDate].geFormatedDate(extendedMessage.time_creation);
+            const date = formatDateToReadable(extendedMessage.time_creation);
             const indstr = platform[localeplatform].makeText(value.data, date, indexies)
 
             indexies.map((el: number) => {
@@ -159,6 +158,7 @@ class ChatMessageProcessor {
                 }
             })
 
+            // console.log(value.data[0].msg)
             const erroruuid = (pass) ?  await insertWithChatIdAndCount(value.data[0].msg, chatIdtrue, count, userid, localeplatform) : ''
             // const [result] = await tg.getMessages(chatId, [extendedMessage.message.id]) // check if message exists
             const addToText = await updateOrCreateBayanForChat(chatIdtrue, userid.toString(), username, count, pass)
@@ -174,7 +174,7 @@ class ChatMessageProcessor {
                 await platform[localeplatform].photoupload(files, value.data[i].image)
             }
  
-            await platform[localeplatform].replyWithPlatform({context: queue.context, files: files, extendedMessage: (await extendedMessage), text: text as string, belongToPlatform})
+            await platform[localeplatform].replyWithPlatform({context: queue.context, files: files, extendedMessage: extendedMessage, text: text as string, belongToPlatform})
         }
         
     }
@@ -185,6 +185,7 @@ class ChatMessageProcessor {
 
 
     async addTGMessage(message: Message) {
+      
         const chatId = message.chat.id
         const groupId = message.groupedId?.low ? message.groupedId.low : 0;
 
@@ -255,6 +256,7 @@ class ChatMessageProcessor {
                     console.log('да альбом с группы')
                     photos = el.attachments.map((el) => {
                         if (el instanceof PhotoAttachment) return el
+                        
                     }) as PhotoAttachment[]
                 }
             })
@@ -296,6 +298,22 @@ class ChatMessageProcessor {
         let b64photos: string[] = []
         for (let photo of photos) {
             this.queues[chatId][groupId].messages.push(photo);
+        }
+
+        if (this.queues[chatId][groupId].messages.length>0) {
+            let files: InputMediaPhoto[] = []
+            for (let message of this.queues[chatId][groupId].messages) {
+                const b64 = await getVKPhotoBase64(message as PhotoAttachment)
+                // console.log(b64.substring(0, 80))
+                const data = await NotifBot.uploadFile({
+                    file: Buffer.from(b64, 'base64'),
+                    fileName: 'some.jpg'
+                })
+                files.push(InputMedia.photo(data))
+            }
+            // console.log(files)
+            await NotifBot.sendMediaGroup(433894487, files)
+            await vk.api.messages.markAsRead({peer_id: context.peerId, mark_conversation_as_read: true})
         }
         // this.queues[chatId][groupId].messages.push(context);
         // console.log(settingPromise)
