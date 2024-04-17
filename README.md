@@ -1,14 +1,12 @@
 # tgbot
 
-MTCute powered Telegram bot
+VK and telegram rep with image search ingine by weviate vector db with some instructions 
+that allow to group images in some cases. 
 
-## Development
+Search engine is done only for making statistic for "баяны". Also u can find some simular pictures from chat
+that u connect to bot. 
 
-```bash
-pnpm install --frozen-lockfile
-cp .env.example .env 
-# edit .env
-pnpm start
-```
+Maybe in future will add discord and brauser picture searching. Os some other search engine.
 
-*generated with @mtcute/create-bot*
+done with MTCute
+
