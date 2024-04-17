@@ -52,6 +52,6 @@ export async function someChatActionsWithText(context: MessageContext<ContextDef
     data.username[context.senderId] = key;
     // console.log(data.username)
     await updateSettings(data.chatid, data.username, context.peerId, nickname, data.tgchatid)
-    return tg.sendText(context.chatId!, 'Установил связь с втоим тг аккаунтом', {replyTo: context.id})
+    return tg.sendText(+data.tgchatid, `${nickname} Установил связь с втоим тг аккаунтом`)
     // return await context.reply('Установил связь с втоим тг аккаунтом')
 }

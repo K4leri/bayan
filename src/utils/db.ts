@@ -246,110 +246,112 @@ interface QueryResultRow {
   bayan: Record<string, BayanEntry>;
 }
 export async function updateSettings(chatid: number, username: UsernamesById, vkchatid: number, nickname: string, tgchatid: number) {
-  
   await pool.query('BEGIN');
-
-
+  
+  
   const insertQuery = `
-      UPDATE settings
-      SET username = $1, vkchatid = $2
-      WHERE chatid = $3
+  UPDATE settings
+  SET username = $1, vkchatid = $2
+  WHERE chatid = $3
   `;
   try {
     await pool.query<Settings>(insertQuery, [username, vkchatid, chatid]);
-
-
+    
+    
     const selectQuery = `
-      SELECT * from settings
-      WHERE vkchatid = $1 and tgchatid IS NULL
+    SELECT * from settings
+    WHERE vkchatid = $1 and tgchatid IS NULL
     `
     const {rows} = await pool.query<Settings>(selectQuery, [vkchatid])
-
+    
     const query = `
-      DELETE from settings
-      WHERE vkchatid = $1 and tgchatid IS NULL
+    DELETE from settings
+    WHERE vkchatid = $1 and tgchatid IS NULL
     `;
     await pool.query<Settings>(query, [vkchatid])
-
+    
     const selectUserStatQuery = `
     SELECT
-      bayan->(SELECT jsonb_object_keys(bayan) FROM userstat WHERE chatid = $1 LIMIT 1)->>'count' AS count,
-      chatid
+    bayan->(SELECT jsonb_object_keys(bayan) FROM userstat WHERE chatid = $1 LIMIT 1)->>'count' AS count,
+    chatid
     FROM
-      userstat
+    userstat
     WHERE
-      chatid = $1;
+    chatid = $1;
+    `;
+    
+    const result = await pool.query(selectUserStatQuery, [rows[0].chatid]);
+    console.log(result.rows)
+  
+    console.log('обновляю')
+    console.log(result.rows[0])
+    const count = (result.rows[0]?.count) ? Number(result.rows[0].count) : 0
+    console.log(`count is ${count}`)
+    const tgchatidStr = tgchatid.toString();
+
+    const currentBayanQuery = `
+      WITH key_value_pairs AS (
+        SELECT
+          kv.key,
+          kv.value,
+          userstat.bayan as bayan,
+          kv.value->>'nickname' AS extracted_nickname
+        FROM 
+          userstat,
+          jsonb_each(userstat.bayan) AS kv(key, value)
+        WHERE chatid = $1
+      )
+      SELECT bayan
+      FROM key_value_pairs
+      WHERE extracted_nickname = $2;
     `;
 
-    const result = await pool.query(selectUserStatQuery, [rows[0].chatid]);
-  
-    if (result.rows.length > 0) {
-      console.log('обновляю')
-      console.log(result.rows[0])
-      const count = Number(result.rows[0].count)
-      console.log(`count is ${count}`)
-      const tgchatidStr = tgchatid.toString();
+    console.log('перед обновлением')
+    const currentResult = await pool.query<QueryResult>(currentBayanQuery, [chatid, nickname]);
 
-      const currentBayanQuery = `
-        WITH key_value_pairs AS (
-          SELECT
-            kv.key,
-            kv.value,
-            userstat.bayan as bayan,
-            kv.value->>'nickname' AS extracted_nickname
-          FROM 
-            userstat,
-            jsonb_each(userstat.bayan) AS kv(key, value)
-          WHERE chatid = $1
-        )
-        SELECT bayan
-        FROM key_value_pairs
-        WHERE extracted_nickname = $2;
+    console.log(currentResult.rows)
+    if (currentResult.rows.length > 0) {
+      console.log('я где-то после')
+      const rows = currentResult.rows as QueryResultRow[];
+      console.log(rows)
+      let bayanToUpdate: Record<string, BayanEntry>;
+      let keyToUpdate: string = '';
+
+      rows.forEach(row => {
+        console.log('++++')
+        console.log(row)
+        Object.entries(row.bayan).forEach(([key, entry]) => {
+          if (entry.nickname === nickname) {
+            bayanToUpdate = row.bayan;
+            keyToUpdate = key;
+          }
+        });
+      });
+      
+      const oldCount = bayanToUpdate![keyToUpdate!].count
+      bayanToUpdate![keyToUpdate!].count =  oldCount + count;
+
+      const updateBayanQuery = `
+        UPDATE userstat
+        SET bayan = $1
+        WHERE chatid = ${chatid};
       `;
 
-      const currentResult = await pool.query<QueryResult>(currentBayanQuery, [chatid, nickname]);
+      console.log('перед обновлением')
+      console.log(rows[0].bayan)
+      await pool.query(updateBayanQuery, [rows[0].bayan]);
 
-      console.log(currentResult.rows)
-      if (currentResult.rows.length > 0) {
-        const rows = currentResult.rows as QueryResultRow[];
-        console.log(rows)
-        let bayanToUpdate: Record<string, BayanEntry>;
-        let keyToUpdate: string = '';
-
-        rows.forEach(row => {
-          console.log('++++')
-          console.log(row)
-          Object.entries(row.bayan).forEach(([key, entry]) => {
-            if (entry.nickname === nickname) {
-              bayanToUpdate = row.bayan;
-              keyToUpdate = key;
-            }
-          });
-        });
-        
-        const oldCount = bayanToUpdate![keyToUpdate!].count
-        bayanToUpdate![keyToUpdate!].count =  oldCount + count;
-
-        const updateBayanQuery = `
-          UPDATE userstat
-          SET bayan = $1
-          WHERE chatid = ${chatid};
-        `;
-
-        console.log('перед обновлением')
-        console.log(rows[0].bayan)
-        await pool.query(updateBayanQuery, [rows[0].bayan]);
-
+      if (result.rows[0]?.chatid) {
         const deleteQuery = `
           DELETE FROM userstat
           WHERE chatid = $1
         `
-        
+   
         await pool.query(deleteQuery, [result.rows[0].chatid]);
       }
-
     }
 
+    console.log('после')
     await pool.query('COMMIT');
 
   } catch (e) {

@@ -13,8 +13,7 @@ import { getTelegramPhotoBase64 } from './utils/action.js';
 import { toInputUser } from '@mtcute/core/utils.js';
 import { setInlineMessage } from './bayan/lagInlineHandler.js';
 import { generateRandomDigits, someChatActionsWithText } from './bayan/sometodo.js';
-import { searchImage } from './utils/weaviate.js';
-import { ContextDefaultState, MessageContext, PhotoAttachment } from 'vk-io';
+import { MessageContext, PhotoAttachment } from 'vk-io';
 import { b64map, createStandartMenuForSearch, inlinePhotoResults } from './bayan/InlineQueries.js';
 
 
@@ -29,7 +28,7 @@ const newRegex = new RegExp(/^\/err\s([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{
 
 vk.updates.on('message_new', async (context, next) => {
     if (context.peerType !== 'user') return
-    if (context.text && /^\/set (off|@\S+)/.test(context.text)) await someChatActionsWithText(context)
+    if (context.text && /^\/set (off|@\S+)/.test(context.text)) return await someChatActionsWithText(context)
     if (context.text && newRegex.test(context.text)) {
         const textArray = context.text.split(' ')
         await context.loadMessagePayload({force: true})

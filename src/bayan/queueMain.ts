@@ -274,6 +274,7 @@ class ChatMessageProcessor {
                 username: context.senderId.toString()
             });
 
+        console.log(settingPromise)
         
         const groupId = (photos.length>1) ? generateRandomDigits(9) : 0;
         let userId = (settingPromise.username) ? Number(settingPromise.username[context.senderId]) : context.senderId
